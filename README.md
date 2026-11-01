@@ -12,8 +12,8 @@ Computer Harness is planned as a persistent, federated, cross-platform computer-
 ## Current direction
 
 - CLI first; dashboard later.
-- Windows, Linux and Android targets.
-- Persistent federated nodes with hybrid networking and hybrid memory.
+- Windows-first rollout, with Windows, Linux and Android as supported targets.
+- Persistent federated nodes with hybrid networking and hybrid memory; Windows is the first implementation target.
 - Cloud-first, quality-first intelligence with replaceable provider and agent-engine adapters.
 - Adaptive parallel execution and Gaming Mode.
 - High proactivity, full project initiative and full self-development under explicit safety gates.

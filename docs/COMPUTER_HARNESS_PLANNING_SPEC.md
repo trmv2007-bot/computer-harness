@@ -52,6 +52,7 @@ The following are user-approved planning decisions, not implementation claims.
 | Project initiative | Full: independently discover, research, plan and initiate permitted projects |
 | Computer access | Full capability target, implemented through explicit platform adapters and permissions |
 | Platforms | Windows, Linux and Android |
+| Development rollout | Windows-first: first working implementation on Windows; keep core contracts portable and add Linux and Android nodes in subsequent rollout stages |
 | macOS | Not in current target scope |
 | Runtime | Persistent |
 | Device architecture | Federated hybrid: each node can operate independently; optional coordination/synchronization |
@@ -507,14 +508,16 @@ This sequence is a planning proposal. Exact language/framework selection remains
 4. **Task contracts and orchestration:** durable task state, dependency DAG, retries and checkpoints.
 5. **Adaptive parallel execution:** concurrency scheduler, locks, worker isolation, result aggregation and cancellation.
 6. **Memory and skills:** hybrid memory, provenance, synchronization model and workflow learning.
-7. **Desktop adapters:** Windows and Linux computer/system interfaces.
-8. **Android node:** mobile-specific runtime, service lifecycle, APIs and secure pairing.
-9. **Federated networking:** device identity, LAN/remote transports, relay and offline sync.
-10. **Vision/browser control:** visual interaction, browser automation and verification.
-11. **Proactivity and initiative:** event-driven monitoring, adaptive notifications and independent project initiation.
-12. **Self-development:** isolated self-modification pipeline, regression gates, staged promotion and rollback.
-13. **Hardening:** reliability, performance, security, privacy and recovery testing.
-14. **Dashboard:** only after the CLI/runtime is stable and the owner approves the interface phase.
+7. **Windows-first node:** implement and validate the first complete local computer/system adapter and first usable vertical slice on Windows. Keep shared-core contracts platform-neutral and avoid Windows-only assumptions in the core.
+8. **Linux node:** implement and validate the Linux adapter against the same capability contracts and acceptance suite.
+9. **Android node:** implement the mobile-specific runtime, service lifecycle, documented APIs, background constraints and secure pairing.
+10. **Federated networking:** device identity, LAN/remote transports, relay and offline sync.
+11. **Vision/browser control:** visual interaction, browser automation and verification.
+12. **Proactivity and initiative:** event-driven monitoring, adaptive notifications and independent project initiation.
+13. **Self-development:** isolated self-modification pipeline, regression gates, staged promotion and rollback.
+14. **Hardening:** reliability, performance, security, privacy and recovery testing.
+15. **Dashboard:** only after the CLI/runtime is stable and the owner approves the interface phase.
+
 
 Security, permissions, auditability and verification are foundational cross-cutting requirements; they must not be postponed until the final hardening phase.
 
