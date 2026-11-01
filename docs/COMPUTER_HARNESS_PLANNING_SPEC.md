@@ -137,7 +137,13 @@ The current recommendation is a **Rust-first shared core and CLI**, with minimal
 - Do not introduce Electron, a bundled browser runtime, an embedded local model server or dashboard framework into the CLI daemon.
 - A future dashboard is separate and deferred; its technology must not increase the CLI runtime's idle footprint.
 
-Rust officially emphasizes native performance, memory efficiency and the absence of a required garbage collector/runtime; Tokio provides configurable asynchronous scheduling intended for both large systems and smaller devices. Rust documents Android compilation targets using the Android NDK. These properties make Rust a strong candidate, but do not prove that a specific Computer Harness build will be fast: actual footprint and responsiveness must be benchmarked on supported hardware. See the links in the project README's architecture references or the cited design references used during planning.
+Rust officially emphasizes native performance, memory efficiency and the absence of a required garbage collector/runtime; Tokio provides configurable asynchronous scheduling intended for both large systems and smaller devices. Rust documents Android compilation targets using the Android NDK. These properties make Rust a strong candidate, but do not prove that a specific Computer Harness build will be fast: actual footprint and responsiveness must be benchmarked on supported hardware.
+
+Reference documentation:
+- [Rust language performance and memory-efficiency overview](https://www.rust-lang.org/)
+- [Tokio async runtime and configurable scheduling](https://tokio.rs/)
+- [Rust Android platform support and NDK targets](https://doc.rust-lang.org/rustc/platform-support/android.html)
+- [Tauri architecture and OS WebView reuse (for a possible later UI only)](https://v2.tauri.app/concept/architecture/)
 
 #### Resource budgets and performance acceptance
 
