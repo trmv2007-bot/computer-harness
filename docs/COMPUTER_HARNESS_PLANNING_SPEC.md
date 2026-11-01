@@ -33,6 +33,7 @@ Personality and capability are separate concerns. Fairy's conversational style m
 8. **No surprise spending:** never silently switch to paid inference, purchase credits or incur a bill.
 9. **Incremental, testable architecture:** define component contracts before choosing implementation technologies.
 10. **No false completion claims:** clearly distinguish verified, partially verified, unverified, failed and blocked outcomes.
+11. **Performance-first:** the always-on control plane must be lightweight, event-driven and resource-bounded. Heavy work belongs in isolated on-demand workers; the harness must not make host devices or active AI/model workloads lag.
 
 ## 2. Agreed decisions
 
@@ -53,6 +54,7 @@ The following are user-approved planning decisions, not implementation claims.
 | Computer access | Full capability target, implemented through explicit platform adapters and permissions |
 | Platforms | Windows, Linux and Android |
 | Development rollout | Windows-first: first working implementation on Windows; keep core contracts portable and add Linux and Android nodes in subsequent rollout stages |
+| Performance posture | Performance-first and lightweight; protect model inference and host-device responsiveness through low idle overhead, bounded concurrency and workload isolation |
 | macOS | Not in current target scope |
 | Runtime | Persistent |
 | Device architecture | Federated hybrid: each node can operate independently; optional coordination/synchronization |
@@ -106,7 +108,58 @@ Use a common capability contract with native implementations per platform.
 
 Android is not simply a small desktop. Its sandboxing, background execution limits, service types and accessibility permissions require a dedicated adapter. Never promise an unrestricted always-running Android process. Persist state and resume tasks across process termination.
 
-### 3.3 Node model
+### 3.3 Performance-first architecture
+
+Performance is a product requirement, not a final optimization pass. The design goal is for the persistent control plane to remain lightweight and for optional workloads to consume resources only when needed.
+
+#### Core runtime posture
+
+- Keep the always-on runtime small: task state, event dispatch, provider status, scheduler, permission checks and lightweight health monitoring only.
+- Use event-driven notifications and OS events where practical; avoid tight polling loops and frequent full-system scans.
+- Use bounded queues, bounded worker counts, backpressure, cancellation and timeouts. Never equate higher concurrency with higher throughput.
+- Make tool adapters, browser automation, screenshot capture, indexing, compilation, media processing and other heavy work on-demand workers that can be throttled or stopped.
+- Keep model inference cloud-first. No large local model download, load or GPU inference by default.
+- Avoid unnecessary copies, huge in-memory histories, unbounded caches, excessive logging and duplicate background services.
+- Cache only where it improves measured latency without creating unbounded memory growth; define TTLs and size limits.
+- Use streaming and incremental results rather than buffering large outputs unnecessarily.
+- Persist state efficiently and batch low-priority writes where safe; never sacrifice task durability or auditability for a benchmark.
+- Provide per-node and per-worker resource budgets and expose actual usage.
+
+#### Recommended technology direction (not yet approved)
+
+The current recommendation is a **Rust-first shared core and CLI**, with minimal platform-native adapters:
+
+- Rust is the leading candidate for the long-lived runtime, scheduler, task state, permission gateway, provider adapters and CLI because it compiles to native binaries, has no required garbage collector/runtime, and provides explicit control over memory and concurrency. This is a recommendation, not a final language decision.
+- Evaluate Tokio or an equivalent carefully configured async runtime for network and task orchestration. Use bounded channels and bounded task admission; do not create an unbounded task per event.
+- Windows and Linux integrations should use thin native Rust adapters behind portable interfaces.
+- Android should use a small native Android/Kotlin lifecycle and permission shell where needed, with shared Rust logic compiled for Android and called through a narrow FFI/JNI boundary. Android service lifecycle and OS restrictions remain authoritative.
+- Keep Python, JavaScript/TypeScript, browser automation frameworks and other heavyweight ecosystems out of the always-on core. They may run as optional, isolated workers when a required integration justifies them.
+- Do not introduce Electron, a bundled browser runtime, an embedded local model server or dashboard framework into the CLI daemon.
+- A future dashboard is separate and deferred; its technology must not increase the CLI runtime's idle footprint.
+
+Rust officially emphasizes native performance, memory efficiency and the absence of a required garbage collector/runtime; Tokio provides configurable asynchronous scheduling intended for both large systems and smaller devices. Rust documents Android compilation targets using the Android NDK. These properties make Rust a strong candidate, but do not prove that a specific Computer Harness build will be fast: actual footprint and responsiveness must be benchmarked on supported hardware.
+
+Reference documentation:
+- [Rust language performance and memory-efficiency overview](https://www.rust-lang.org/)
+- [Tokio async runtime and configurable scheduling](https://tokio.rs/)
+- [Rust Android platform support and NDK targets](https://doc.rust-lang.org/rustc/platform-support/android.html)
+- [Tauri architecture and OS WebView reuse (for a possible later UI only)](https://v2.tauri.app/concept/architecture/)
+
+#### Resource budgets and performance acceptance
+
+Do not invent a single RAM/CPU number before measuring the actual Windows baseline and intended workloads. Gate 0 must define explicit budgets for:
+- Idle runtime resident memory and CPU wakeups.
+- Typical interactive task memory/CPU/network activity.
+- Peak worker concurrency and aggregate per-node memory.
+- Android idle/background impact and battery usage.
+- Gaming Mode CPU/GPU/disk/network overhead.
+- Startup time, CLI response latency, task scheduling latency and recovery time.
+
+Measure the core separately from optional workers (browser, GUI, indexing, compilation, model clients). Record baseline, target, peak, and test methodology for each supported device. Performance regressions must block release or require an explicitly documented owner-approved trade-off.
+
+The performance governor must reduce or suspend eligible workloads before the host becomes unresponsive. It must never kill user applications or change system-wide performance settings without authorization.
+
+### 3.4 Node model
 
 Each paired device has its own runtime, device memory and execution capabilities. A node should remain useful when disconnected. A coordinator is optional, not a single point of failure. The system must support capability discovery, node availability, task ownership, checkpoints, leases and recovery.
 
@@ -599,7 +652,7 @@ A feature is not complete merely because it exists in the repository. The follow
 
 The following must be resolved or explicitly assigned a documented default before implementation:
 
-- Programming language(s), packaging and cross-platform build strategy.
+- Final programming language(s), packaging and cross-platform build strategy. Current recommendation: Rust-first shared core/CLI with thin native adapters; keep this pending until a small Windows prototype and footprint benchmark validate it.
 - Core runtime IPC/API and event protocol.
 - Database/event-store technology and migration policy.
 - Memory embedding/indexing strategy, if any.
