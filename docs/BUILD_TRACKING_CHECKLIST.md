@@ -14,6 +14,7 @@ This document is the execution companion to [the planning specification](./COMPU
 - [ ] Keep a requirements-to-code-to-test traceability matrix.
 - [ ] Never mark a feature complete based only on generated code or a model's claim.
 - [ ] Test the actual runtime on each supported platform; do not infer Android/Linux support from Windows tests.
+- [ ] Follow the Windows-first rollout: complete the first usable Windows vertical slice, then implement Linux and Android against the same portable core contracts.
 - [ ] Record exact test commands, environment, results and limitations.
 - [ ] Maintain migration, backup and rollback paths for user data and runtime updates.
 - [ ] Keep costs at zero unless the owner explicitly authorizes a paid service.
@@ -63,25 +64,31 @@ This document is the execution companion to [the planning specification](./COMPU
 - [ ] Context compression/restoration tests.
 - [ ] Inspection, correction, export and deletion behavior.
 
-### Gate 6 — Operating-system nodes
-- [ ] Windows adapter and integration tests.
-- [ ] Linux adapter and integration tests.
-- [ ] Android node with lifecycle/background restrictions documented and tested.
-- [ ] Per-node permissions, pairing and revocation.
+### Gate 6 — Windows-first operating-system node
+- [ ] Implement and test the first usable Windows node and local computer-control adapter.
+- [ ] Keep shared-core interfaces and capability contracts portable; isolate Windows-specific code behind the Windows adapter.
+- [ ] Validate CLI, persistence, tools, permissions, Gaming Mode and recovery on Windows.
+- [ ] Record known Windows-specific limitations and portability risks.
 
-### Gate 7 — Federation
+### Gate 7 — Linux and Android nodes
+- [ ] Implement and test the Linux adapter against the shared capability contracts.
+- [ ] Implement the Android node with lifecycle/background restrictions documented and tested.
+- [ ] Verify per-node permissions, pairing and revocation across all supported targets.
+- [ ] Run cross-platform contract and interoperability tests; do not infer support from Windows results.
+
+### Gate 8 — Federation
 - [ ] LAN connectivity and secure remote transport.
 - [ ] Relay fallback decision and implementation, if approved.
 - [ ] Node discovery, task leases and duplicate prevention.
 - [ ] Offline work and reconnection reconciliation.
 
-### Gate 8 — Vision and research
+### Gate 9 — Vision and research
 - [ ] Browser automation with permission boundaries.
 - [ ] Screenshot/GUI understanding and outcome verification.
 - [ ] Research source tracking, citation and uncertainty reporting.
 - [ ] No false claims about inaccessible media or private resources.
 
-### Gate 9 — Proactivity and self-development
+### Gate 10 — Proactivity and self-development
 - [ ] High-proactivity event monitoring with bounded overhead.
 - [ ] Full project initiative inside configured authority.
 - [ ] Adaptive notifications and quiet/Gaming Mode behavior.
@@ -89,7 +96,7 @@ This document is the execution companion to [the planning specification](./COMPU
 - [ ] Regression, security, staged-promotion and rollback gates.
 - [ ] Protected safety supervisor and audit controls.
 
-### Gate 10 — Performance, security and release readiness
+### Gate 11 — Performance, security and release readiness
 - [ ] Gaming Mode performance measurements on target hardware.
 - [ ] CPU/RAM/GPU/disk/network resource governor tests.
 - [ ] Threat-model review and permission abuse tests.
