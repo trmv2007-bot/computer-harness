@@ -16,6 +16,9 @@ This document is the execution companion to [the planning specification](./COMPU
 - [ ] Test the actual runtime on each supported platform; do not infer Android/Linux support from Windows tests.
 - [ ] Follow the Windows-first rollout: complete the first usable Windows vertical slice, then implement Linux and Android against the same portable core contracts.
 - [ ] Record exact test commands, environment, results and limitations.
+- [ ] Treat idle footprint and host responsiveness as release requirements, not optional optimization.
+- [ ] Keep always-on core separate from on-demand heavy workers; avoid unbounded polling, queues, caches and concurrency.
+- [ ] Benchmark the core and optional workers separately on real target hardware before setting numeric budgets.
 - [ ] Maintain migration, backup and rollback paths for user data and runtime updates.
 - [ ] Keep costs at zero unless the owner explicitly authorizes a paid service.
 - [ ] Preserve the CLI-first direction; dashboard is deferred.
@@ -34,6 +37,8 @@ This document is the execution companion to [the planning specification](./COMPU
 - [ ] Persistent background runtime and reconnecting sessions.
 - [ ] Durable task/event store, checkpoints and recovery.
 - [ ] Diagnostics, logs, configuration and migrations.
+- [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness for the persistent core.
+- [ ] Demonstrate that closing CLI sessions does not increase background resource consumption.
 
 ### Gate 2 — Intelligence adapters
 - [ ] Separate model-provider and agent-engine interfaces.
@@ -98,6 +103,10 @@ This document is the execution companion to [the planning specification](./COMPU
 
 ### Gate 11 — Performance, security and release readiness
 - [ ] Gaming Mode performance measurements on target hardware.
+- [ ] Establish measured idle/active resource budgets separately for core and workers.
+- [ ] Benchmark bounded concurrency under load and verify backpressure prevents resource spikes.
+- [ ] Measure Android battery/background impact and Windows/Linux idle overhead.
+- [ ] Verify browser, GUI, indexing and compile workers can be throttled or stopped independently.
 - [ ] CPU/RAM/GPU/disk/network resource governor tests.
 - [ ] Threat-model review and permission abuse tests.
 - [ ] Crash, network-loss, provider-exhaustion and recovery tests.
