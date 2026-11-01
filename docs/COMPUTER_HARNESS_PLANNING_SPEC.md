@@ -108,7 +108,7 @@ Use a common capability contract with native implementations per platform.
 
 Android is not simply a small desktop. Its sandboxing, background execution limits, service types and accessibility permissions require a dedicated adapter. Never promise an unrestricted always-running Android process. Persist state and resume tasks across process termination.
 
-### 3.4 Performance-first architecture
+### 3.3 Performance-first architecture
 
 Performance is a product requirement, not a final optimization pass. The design goal is for the persistent control plane to remain lightweight and for optional workloads to consume resources only when needed.
 
@@ -159,7 +159,7 @@ Measure the core separately from optional workers (browser, GUI, indexing, compi
 
 The performance governor must reduce or suspend eligible workloads before the host becomes unresponsive. It must never kill user applications or change system-wide performance settings without authorization.
 
-### 3.3 Node model
+### 3.4 Node model
 
 Each paired device has its own runtime, device memory and execution capabilities. A node should remain useful when disconnected. A coordinator is optional, not a single point of failure. The system must support capability discovery, node availability, task ownership, checkpoints, leases and recovery.
 
