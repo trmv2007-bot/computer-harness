@@ -11,7 +11,8 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 - SQLite database with WAL mode, schema version marker, durable task records and event log.
 - Task commands: `fairy task create <title> <objective>`, `fairy task list`, `fairy task show <id>`, `fairy task cancel <id>`.
 - Local stop-request marker via `fairy stop-all` (does not yet terminate workers).
-- Foreground loopback control plane (`fairy serve`) with per-user token authentication, bounded JSON requests, and task/status/shutdown RPC.\n- Persisted exact-name capability grants, action-scoped approval requests, an audit event trail, and a policy evaluator; paid inference/financial actions are denied by the default zero-spend rule.
+- Foreground loopback control plane (`fairy serve`) with per-user token authentication, bounded JSON requests, and task/status/shutdown RPC.
+- Persisted exact-name capability grants, action-scoped approval requests, an audit event trail, and a policy evaluator; paid inference/financial actions are denied by the default zero-spend rule.
 - Windows/Linux CI workflow for formatting, Clippy, tests and release build.
 - Explicit architecture contracts and an implementation status ledger.
 
