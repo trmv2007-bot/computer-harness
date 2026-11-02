@@ -263,8 +263,9 @@ fn read_text_file(root: &Dir, input_json: &str) -> Result<Value> {
     file.take(MAX_TEXT_FILE_BYTES + 1)
         .read_to_string(&mut text)
         .context("file is not valid UTF-8 text or cannot be read")?;
+    let bytes_read = u64::try_from(text.len()).context("text length could not be represented")?;
     anyhow::ensure!(
-        text.len() as u64 <= MAX_TEXT_FILE_BYTES,
+        bytes_read <= MAX_TEXT_FILE_BYTES,
         "file exceeded the 1 MiB text-read limit while being read"
     );
     Ok(json!({
