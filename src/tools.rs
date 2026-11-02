@@ -31,7 +31,7 @@ pub struct ToolDescriptor {
 }
 
 fn registry() -> Vec<ToolDescriptor> {
-    let mut tools = vec![
+    let tools = vec![
         ToolDescriptor {
             name: "filesystem.list",
             version: "1",
@@ -64,7 +64,9 @@ fn registry() -> Vec<ToolDescriptor> {
     ];
 
     #[cfg(windows)]
-    tools.push(ToolDescriptor {
+    let tools = {
+        let mut tools = tools;
+        tools.push(ToolDescriptor {
         name: "desktop.list_windows",
         version: "1",
         description: "List up to 200 visible top-level Windows desktop windows with title, class and process ID. Read-only; window titles may contain private information.",
@@ -75,7 +77,9 @@ fn registry() -> Vec<ToolDescriptor> {
             "properties": {},
             "additionalProperties": false
         }),
-    });
+        });
+        tools
+    };
 
     tools
 }
