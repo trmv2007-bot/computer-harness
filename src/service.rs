@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
-use std::path::Path;
+use std::{path::Path, time::Duration};
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
 #[cfg(any(windows, target_os = "linux"))]
@@ -40,7 +40,16 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
             status.success(),
             "could not register Fairy at user logon: {status}"
         );
-        Ok(format!("Installed user logon task '{WINDOWS_TASK}'."))
+        if !crate::ipc::is_running(_data_dir).await {
+            let start = Command::new("schtasks")
+                .args(["/Run", "/TN", WINDOWS_TASK])
+                .status()
+                .await
+                .context("start Fairy after registering its logon task")?;
+            anyhow::ensure!(start.success(), "could not start Fairy after installation: {start}");
+            wait_for_runtime(_data_dir).await?;
+        }
+        Ok(format!("Installed and started user logon task '{WINDOWS_TASK}'."))
     }
 
     #[cfg(target_os = "linux")]
@@ -64,8 +73,9 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
             let _ = systemctl(&["daemon-reload"]).await;
             return Err(error).context("enable Fairy's systemd user service");
         }
+        wait_for_runtime(_data_dir).await?;
         Ok(format!(
-            "Installed and enabled '{LINUX_UNIT}' at {}",
+            "Installed, enabled and started '{LINUX_UNIT}' at {}",
             unit_path.display()
         ))
     }
@@ -136,13 +146,15 @@ pub async fn start(_data_dir: &Path) -> Result<String> {
             status.success(),
             "could not start Fairy's scheduled task: {status}"
         );
-        Ok("Fairy start requested through Windows Task Scheduler.".to_owned())
+        wait_for_runtime(_data_dir).await?;
+        Ok("Fairy started through Windows Task Scheduler.".to_owned())
     }
 
     #[cfg(target_os = "linux")]
     {
         systemctl(&["start", LINUX_UNIT]).await?;
-        Ok("Fairy start requested through systemd.".to_owned())
+        wait_for_runtime(_data_dir).await?;
+        Ok("Fairy started through systemd.".to_owned())
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -178,6 +190,20 @@ pub async fn stop(data_dir: &Path) -> Result<String> {
         anyhow::bail!(
             "automatic service management is currently supported on Windows and Linux only"
         )
+    }
+}
+
+async fn wait_for_runtime(data_dir: &Path) -> Result<()> {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if crate::ipc::is_running(data_dir).await {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            tokio::time::Instant::now() < deadline,
+            "Fairy service manager started the process, but the control plane did not become reachable within 10 seconds"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }
 
