@@ -112,7 +112,7 @@ impl Role {
             "filesystem.read_text — read-only UTF-8 text reads within the configured workspace"
                 .to_owned(),
         ];
-        if cfg!(windows) && matches!(self, Self::Fairy | Self::Operator | Self::Auditor) {
+        if cfg!(windows) && matches!(self, Self::Fairy | Self::Operator) {
             tool_scope.push(
                 "desktop.list_windows — read-only visible window metadata; requires desktop.observe"
                     .to_owned(),
@@ -245,7 +245,7 @@ mod tests {
             let expected_tools = if cfg!(windows)
                 && matches!(
                     profile.id.as_str(),
-                    "fairy" | "operator" | "auditor"
+                    "fairy" | "operator"
                 ) {
                 3
             } else {
