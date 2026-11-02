@@ -188,10 +188,40 @@ async function main() {
     { annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } },
   );
 
+  const fairyTools = [listTool, readTextTool];
+  const fairyToolNames = [
+    "mcp__fairy__filesystem_list",
+    "mcp__fairy__filesystem_read_text",
+  ];
+
+  if (profile.tool_scope.some((scope) => scope.startsWith("desktop.list_windows"))) {
+    const desktopTool = tool(
+      "desktop_list_windows",
+      "List visible top-level Windows desktop windows with title, class and process ID. This is read-only observation only; window titles can contain private information. It requires an explicit desktop.observe capability grant.",
+      {},
+      async () => {
+        try {
+          const data = await ipc({
+            action: "execute_tool",
+            name: "desktop.list_windows",
+            input_json: "{}",
+            approval_id: null,
+          });
+          return { content: [{ type: "text", text: JSON.stringify(data) }] };
+        } catch (error) {
+          return wrapToolFailure(error);
+        }
+      },
+      { annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } },
+    );
+    fairyTools.push(desktopTool);
+    fairyToolNames.push("mcp__fairy__desktop_list_windows");
+  }
+
   const server = createSdkMcpServer({
     name: "fairy",
     version: "0.1.0",
-    tools: [listTool, readTextTool],
+    tools: fairyTools,
   });
 
   // Ask qodercli to stop gracefully before the Rust parent enforces its
@@ -224,14 +254,8 @@ async function main() {
         "The available tools are read-only and restricted to the configured workspace. You cannot edit files, run shell commands, browse the web, or contact external services.",
         "Do not request secrets. Do not infer that Qoder inference is unlimited or free; report quota information only when the SDK supplies it.",
       ].join("\\n"),
-      tools: [
-        "mcp__fairy__filesystem_list",
-        "mcp__fairy__filesystem_read_text",
-      ],
-      allowedTools: [
-        "mcp__fairy__filesystem_list",
-        "mcp__fairy__filesystem_read_text",
-      ],
+      tools: fairyToolNames,
+      allowedTools: fairyToolNames,
       disallowedTools: ["Bash", "Edit", "Write", "Agent", "WebFetch", "WebSearch"],
       permissionMode: "dontAsk",
       maxTurns: 8,
