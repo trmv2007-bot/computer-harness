@@ -39,12 +39,10 @@ pub fn evaluate(
     }
 
     match effect {
-        SideEffect::Financial | SideEffect::PaidInference => {
-            AuthorizationDecision::Denied(
-                "blocked by the zero-spend policy; explicit spend authorization is not configured"
-                    .to_owned(),
-            )
-        }
+        SideEffect::Financial | SideEffect::PaidInference => AuthorizationDecision::Denied(
+            "blocked by the zero-spend policy; explicit spend authorization is not configured"
+                .to_owned(),
+        ),
         SideEffect::Destructive | SideEffect::Administrator | SideEffect::ExternalCommunication => {
             if approval_valid {
                 AuthorizationDecision::Allowed
