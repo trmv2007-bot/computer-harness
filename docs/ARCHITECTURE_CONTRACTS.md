@@ -6,7 +6,7 @@ This document defines boundaries for implementation. It does not claim the adapt
 The long-lived control plane owns task state, event dispatch, policy checks, worker admission, provider health, checkpoints and audit records. It must not run browser automation, screenshots, indexing, builds or model inference inside its event loop.
 
 ## Persistent task contract
-A task has an immutable identifier, human-readable title, objective, lifecycle state, timestamps, dependency references, resource budget, permission envelope, checkpoints, evidence and recovery policy. The current SQLite schema implements only identity, title, objective, state, timestamps and a minimal event log. Scheduling, dependency graphs, worker leases, checkpoints and evidence are future work.
+A task has an immutable identifier, human-readable title, objective, lifecycle state, timestamps, dependency references, resource budget, permission envelope, checkpoints, evidence and recovery policy. The current SQLite schema implements identity, title, objective, state, timestamps, event log, capability grants, action-scoped approvals and app settings. Task scheduling, worker leases, checkpoints, retry/recovery and durable result/evidence records remain future work.
 
 Allowed state transitions (target contract):
 - queued -> running | paused | cancelled | failed
@@ -20,7 +20,7 @@ A task must not be marked completed merely because a model returned a success me
 ## Provider contract
 A provider adapter must expose: provider identity, official authentication status, model capability metadata, quota/rate-limit state when available, request/cancel operations, streaming support, usage metadata and normalized errors. It must declare whether requests can incur cost. The global zero-spend policy denies paid routes before dispatch. Provider quota exhaustion pauses or queues work; it must not trigger paid fallback.
 
-The Qoder model/provider adapter and Qoder Agent SDK/engine adapter are separate integration points. They may share the same account entitlement. No independent quota pool may be assumed without evidence. No Qoder adapter is implemented in this source slice.
+The Qoder model/provider adapter and Qoder Agent SDK/engine adapter are separate integration points. They may share the same account entitlement. No independent quota pool may be assumed without evidence. An optional TypeScript Qoder Agent SDK worker now reuses local CLI authentication via qodercliAuth(). It exposes only Fairy-owned read-only MCP tools through authenticated loopback IPC. The separate model-provider adapter, quota-aware routing, and end-to-end account authentication/quota verification remain unimplemented or unverified.
 
 ## Tool contract
 Every tool registration must declare:
@@ -32,7 +32,7 @@ Every tool registration must declare:
 - timeout, cancellation behavior and resource estimate;
 - evidence emitted and verification strategy.
 
-Target rule: all invocations pass through a single permission gateway and append an audit event. Models never receive raw unrestricted shell or filesystem authority by default. Current implementation: exact-name capability grants, action-scoped approval records, one-time approval consumption storage and a side-effect policy evaluator exist. The CLI policy check is advisory only; there is no tool executor/gateway yet.
+Target rule: all invocations pass through a single permission gateway and append an audit event. Models never receive raw unrestricted shell or filesystem authority by default. Current implementation: typed registry, exact-name capability grants, action-scoped approvals, one-time approval consumption and side-effect evaluator exist. The first two tools are workspace-bounded read-only filesystem operations. Canonical path checks are not an OS sandbox and remain vulnerable to path races.
 
 ## Safety contract
 Sensitive operations require an explicit capability grant and, where configured, an interactive approval. Destructive, administrator and external-communication effects require approval; financial and paid-inference actions are hard-denied by the current zero-spend policy. Approval records are action-scoped and support one-time consumption. Secrets are not yet comprehensively redacted from logs. Stop-all must work locally without network access and prevent new work from being admitted. A stop marker alone does not terminate already-running workers; a supervisor with cancellation tokens and process ownership is required before this feature can be called operational.
