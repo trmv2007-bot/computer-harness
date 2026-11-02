@@ -300,7 +300,8 @@ impl Store {
         let mut recovered = 0;
         for (run_id, task_id) in interrupted {
             let finished_at = now();
-            let error = "interrupted by runtime shutdown or process crash; explicit retry is required";
+            let error =
+                "interrupted by runtime shutdown or process crash; explicit retry is required";
             let changed = tx.execute(
                 "UPDATE task_runs SET status='failed',error=?2,finished_at=?3
                  WHERE id=?1 AND status='running'",
@@ -324,7 +325,8 @@ impl Store {
                 &tx,
                 &task_id,
                 "task.state_changed",
-                &serde_json::json!({"from":"running","to":"failed","reason":"runtime_recovery"}).to_string(),
+                &serde_json::json!({"from":"running","to":"failed","reason":"runtime_recovery"})
+                    .to_string(),
             )?;
             recovered += 1;
         }
@@ -940,7 +942,9 @@ mod tests {
         let task_id;
         {
             let store = Store::open(&path).unwrap();
-            let task = store.create_task("Crash recovery", "Recover an interrupted worker").unwrap();
+            let task = store
+                .create_task("Crash recovery", "Recover an interrupted worker")
+                .unwrap();
             task_id = task.id.clone();
             store.start_task_run(&task_id, "Inspect safely").unwrap();
             assert_eq!(store.get_task(&task_id).unwrap().unwrap().state, "running");
@@ -949,7 +953,10 @@ mod tests {
         let recovered = Store::open(&path).unwrap();
         assert_eq!(recovered.recover_interrupted_runs().unwrap(), 1);
         assert_eq!(recovered.recover_interrupted_runs().unwrap(), 0);
-        assert_eq!(recovered.get_task(&task_id).unwrap().unwrap().state, "failed");
+        assert_eq!(
+            recovered.get_task(&task_id).unwrap().unwrap().state,
+            "failed"
+        );
         let run = recovered.latest_task_run(&task_id).unwrap().unwrap();
         assert_eq!(run.status, "failed");
         assert!(run.error.unwrap().contains("explicit retry"));
