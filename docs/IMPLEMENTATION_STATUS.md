@@ -6,38 +6,38 @@ Updated: 2026-11-02
 
 **NOT COMPLETE — early core prototype.** The repository is not release-ready. The planning specification remains the source of truth; this ledger records only implemented and evidenced work.
 
-## Implemented source (CI-tested at the previous commit)
+## Implemented source
 
-- Rust CLI: doctor, status, foreground run shell, task and stop-all commands.
+- Rust CLI: doctor, status, foreground control-plane server, daemon status/shutdown, task management, policy and approval commands.
 - Per-user data/config directory setup.
-- SQLite database initialized in WAL mode with schema version marker.
-- Durable task create/list/show/cancel operations and validated state transitions.
-- Minimal task event log.
-- Stop-all request marker (records a request only; does not stop running work).
-- Architecture contracts for task, provider, tool, safety, node, memory, skill and resource-governor boundaries.
-- Windows/Linux CI workflow; latest observed run passed on both runners for commit `95994a8fefc449b1b21389c989d980460a22f4d3` (format, Clippy, unit tests and release build).
+- SQLite WAL database with additive schema version 2, durable tasks and event records.
+- Task create/list/show/cancel and validated state transitions.
+- Foreground loopback control plane with random per-user token and a bounded JSON protocol.
+- Task CLI commands use the control plane when reachable and fall back to local SQLite if it is not.
+- RPC: ping, list/get/create/cancel/set-state task, shutdown.
+- Explicit exact-name capability grants; wildcard capability names are rejected.
+- Approval requests are bound to one exact action; approval resolution is audited.
+- One-time approval consumption is stored atomically in the database for the future tool executor. It is not exposed as a standalone command because consuming approval without executing the action would be misleading.
+- Policy evaluator distinguishes read-only, reversible write, destructive, administrator, external communication, financial and paid-inference effects.
+- Financial and paid-inference actions are hard-denied by the current zero-spend policy.
+- Windows/Linux CI workflow for formatting, Clippy, tests and release builds.
 
-## New control-plane work (awaiting CI on current branch head)
+## In progress / not verified
 
-- Foreground local control-plane server bound to IPv4 loopback only.
-- Per-user random IPC token; Unix token file permissions are set to owner read/write.
-- Bounded (64 KiB) single-line JSON request/response protocol.
-- RPC actions: ping, list tasks, get task, create task, cancel task and shutdown.
-- Database operations are dispatched to Tokio blocking workers rather than run on the async accept loop.
-- The server is manually started with `fairy serve`; it is not installed, detached, or auto-started by the operating system.
-- Windows token ACLs currently inherit the user's profile-directory ACL; a dedicated ACL hardening implementation is still required.
+- Current policy/approval source changes are awaiting a fresh CI result. The last fully passing cross-platform CI is run `41398076332` at commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9`, before the policy/approval implementation.
 
 ## Not implemented
 
-OS-managed background service/auto-start and reconnecting CLI client; task scheduling and worker execution; DAG/dependencies, leases and checkpoint recovery; Qoder/provider adapters; model routing/quota/cost enforcement; tool registry and permission gateway; approval UI; audit/secret redaction; actual process cancellation; Windows/Linux/Android computer-control adapters; browser/GUI/vision/research; memory and synchronization; skill engine; secure pairing/federation; notifications; Gaming Mode/resource governor; self-development; dashboard; installer/updater.
+OS-managed background service installation/auto-start; reconnect/recovery behavior; task scheduler and worker execution; DAG/dependencies, leases and checkpoint recovery; Qoder/provider adapters; model routing/quota/cost metadata and provider pause/resume; actual tool registry/execution and enforcement gateway; interactive approval UI; process sandboxing and secret redaction; operational emergency cancellation; Windows/Linux/Android computer-control adapters; browser/GUI/vision/research; durable memory and sync; skill engine; secure device pairing/federation; notifications; Gaming Mode/resource governor; proactive event monitors; self-development; dashboard; installer/updater.
 
-## Verification evidence
+## Verification evidence and limitations
 
 - Rust/Cargo are not installed in the authoring environment; local compilation and tests have not been run.
-- Hosted CI run `41398076332` for commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9` passed on Windows and Ubuntu: formatting, Clippy, all unit/integration tests, and release builds.
-- The IPC lifecycle test passed on both CI runners (server startup, ping, create/get/list/cancel task, authenticated shutdown and endpoint cleanup).
+- CI run `41398076332` passed Windows and Ubuntu formatting, Clippy, all tests and release builds for the control-plane layer.
+- CI for the subsequent policy/approval changes is pending or being repaired; do not treat those changes as verified until a complete green run is recorded.
 - Windows owner-device and iQOO Android validation have not been run.
 - No Qoder authentication or provider request has been made from this branch.
+- Windows IPC token protection currently relies on the inherited ACL of the per-user application-data directory. Dedicated ACL verification is still required.
 
 ## Status rules
 
