@@ -301,6 +301,16 @@ async fn agent_ask(
         store.has_capability("filesystem.read")?,
         "filesystem.read capability must be explicitly granted before starting Fairy's Qoder worker"
     );
+    if profile
+        .tool_scope
+        .iter()
+        .any(|scope| scope.starts_with("desktop.list_windows"))
+    {
+        anyhow::ensure!(
+            store.has_capability("desktop.observe")?,
+            "desktop.observe capability must be explicitly granted before this specialist can inspect visible window metadata"
+        );
+    }
     anyhow::ensure!(
         agent_dir
             .join("node_modules")
