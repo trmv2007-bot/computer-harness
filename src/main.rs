@@ -274,11 +274,17 @@ async fn main() -> Result<()> {
             }
             ApprovalCommand::List => print_json(&store.list_approvals()?)?,
             ApprovalCommand::Approve { id } => {
-                anyhow::ensure!(store.resolve_approval(&id, true)?, "approval not found or already resolved");
+                anyhow::ensure!(
+                    store.resolve_approval(&id, true)?,
+                    "approval not found or already resolved"
+                );
                 println!("approved {id}");
             }
             ApprovalCommand::Deny { id } => {
-                anyhow::ensure!(store.resolve_approval(&id, false)?, "approval not found or already resolved");
+                anyhow::ensure!(
+                    store.resolve_approval(&id, false)?,
+                    "approval not found or already resolved"
+                );
                 println!("denied {id}");
             }
         },
