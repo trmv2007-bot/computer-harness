@@ -1,6 +1,7 @@
 mod ipc;
 mod policy;
 mod store;
+mod tools;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -42,6 +43,16 @@ enum Command {
         #[command(subcommand)]
         action: TaskCommand,
     },
+    /// Configure the local filesystem boundary for safe tools.
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceCommand,
+    },
+    /// Discover and execute registered, permission-gated tools.
+    Tool {
+        #[command(subcommand)]
+        action: ToolCommand,
+    },
     /// Manage explicitly granted capabilities and evaluate tool policies.
     Policy {
         #[command(subcommand)]
@@ -62,6 +73,29 @@ enum DaemonCommand {
     Status,
     /// Ask the local control plane to stop.
     Shutdown,
+}
+
+#[derive(Subcommand)]
+enum WorkspaceCommand {
+    /// Set the canonical directory boundary used by filesystem tools.
+    Set { path: PathBuf },
+    /// Show the configured workspace root.
+    Show,
+    /// Remove the workspace root configuration.
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum ToolCommand {
+    /// List registered tools and their permission metadata.
+    List,
+    /// Execute one registered tool with JSON input.
+    Call {
+        name: String,
+        input_json: String,
+        #[arg(long)]
+        approval_id: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -234,6 +268,30 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Command::Workspace { action } => match action {
+            WorkspaceCommand::Set { path } => {
+                let canonical = path.canonicalize().context("workspace directory does not exist")?;
+                anyhow::ensure!(canonical.is_dir(), "workspace path must be a directory");
+                let value = canonical.to_string_lossy().to_string();
+                store.set_setting("workspace_root", &value)?;
+                print_json(&serde_json::json!({"workspace_root":value,"status":"configured"}))?;
+            }
+            WorkspaceCommand::Show => {
+                let root = store.get_setting("workspace_root")?;
+                print_json(&serde_json::json!({"workspace_root":root}))?;
+            }
+            WorkspaceCommand::Clear => {
+                let removed = store.remove_setting("workspace_root")?;
+                print_json(&serde_json::json!({"removed":removed}))?;
+            }
+        },
+        Command::Tool { action } => match action {
+            ToolCommand::List => print_json(&tools::list_tools())?,
+            ToolCommand::Call { name, input_json, approval_id } => {
+                let result = tools::execute(&store, &name, &input_json, approval_id.as_deref())?;
+                print_json(&result)?;
+            }
+        },
         Command::Policy { action } => match action {
             PolicyCommand::List => print_json(&store.list_capabilities()?)?,
             PolicyCommand::Grant { capability, note } => {
