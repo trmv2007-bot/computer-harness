@@ -219,7 +219,9 @@ mod tests {
     #[test]
     fn enforces_task_state_machine_and_records_transitions() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        let task = store.create_task("State machine", "Verify legal transitions").unwrap();
+        let task = store
+            .create_task("State machine", "Verify legal transitions")
+            .unwrap();
         let running = store.transition_task(&task.id, "running").unwrap();
         assert_eq!(running.state, "running");
         let completed = store.transition_task(&task.id, "completed").unwrap();
