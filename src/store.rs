@@ -213,15 +213,18 @@ impl Store {
         anyhow::ensure!(!note.is_empty(), "grant note cannot be empty");
         anyhow::ensure!(note.len() <= 1000, "grant note must be 1000 bytes or fewer");
         let granted_at = now();
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             "INSERT INTO capability_grants(capability,note,granted_at) VALUES(?1,?2,?3)
              ON CONFLICT(capability) DO UPDATE SET note=excluded.note, granted_at=excluded.granted_at",
             params![capability, note, granted_at],
         )?;
-        self.record_system_event(
+        record_system_event_on(
+            &tx,
             "capability.granted",
             &serde_json::json!({"capability":capability,"note":note}).to_string(),
         )?;
+        tx.commit()?;
         Ok(CapabilityGrant {
             capability,
             note: note.to_owned(),
@@ -231,16 +234,19 @@ impl Store {
 
     pub fn revoke_capability(&self, capability: &str) -> Result<bool> {
         let capability = validate_key(capability, "capability")?;
-        let changed = self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute(
             "DELETE FROM capability_grants WHERE capability=?1",
             [capability.as_str()],
         )?;
         if changed > 0 {
-            self.record_system_event(
+            record_system_event_on(
+                &tx,
                 "capability.revoked",
                 &serde_json::json!({"capability":capability}).to_string(),
             )?;
         }
+        tx.commit()?;
         Ok(changed > 0)
     }
 
@@ -283,26 +289,31 @@ impl Store {
             state: "pending".to_owned(),
             created_at: now(),
         };
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             "INSERT INTO approvals(id,action,reason,state,created_at) VALUES(?1,?2,?3,'pending',?4)",
             params![approval.id, approval.action, approval.reason, approval.created_at],
         )?;
-        self.record_system_event("approval.requested", &serde_json::to_string(&approval)?)?;
+        record_system_event_on(&tx, "approval.requested", &serde_json::to_string(&approval)?)?;
+        tx.commit()?;
         Ok(approval)
     }
 
     pub fn resolve_approval(&self, id: &str, approved: bool) -> Result<bool> {
         let next = if approved { "approved" } else { "denied" };
-        let changed = self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute(
             "UPDATE approvals SET state=?2 WHERE id=?1 AND state='pending'",
             params![id, next],
         )?;
         if changed > 0 {
-            self.record_system_event(
+            record_system_event_on(
+                &tx,
                 "approval.resolved",
                 &serde_json::json!({"id":id,"state":next}).to_string(),
             )?;
         }
+        tx.commit()?;
         Ok(changed > 0)
     }
 
@@ -346,7 +357,8 @@ impl Store {
     #[allow(dead_code)]
     pub fn consume_approval(&self, id: &str, action: &str) -> Result<bool> {
         let action = validate_key(action, "approval action")?;
-        let changed = self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute(
             "INSERT INTO approval_uses(approval_id,consumed_at)
              SELECT id,?3 FROM approvals
              WHERE id=?1 AND action=?2 AND state='approved'
@@ -354,20 +366,14 @@ impl Store {
             params![id, action, now()],
         )?;
         if changed > 0 {
-            self.record_system_event(
+            record_system_event_on(
+                &tx,
                 "approval.consumed",
                 &serde_json::json!({"id":id,"action":action}).to_string(),
             )?;
         }
+        tx.commit()?;
         Ok(changed == 1)
-    }
-
-    fn record_system_event(&self, kind: &str, payload: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO events(task_id,event_type,payload,created_at) VALUES(NULL,?1,?2,?3)",
-            params![kind, payload, now()],
-        )?;
-        Ok(())
     }
 
     pub fn event_count(&self) -> Result<i64> {
@@ -375,6 +381,14 @@ impl Store {
             .conn
             .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?)
     }
+}
+
+fn record_system_event_on(conn: &Connection, kind: &str, payload: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO events(task_id,event_type,payload,created_at) VALUES(NULL,?1,?2,?3)",
+        params![kind, payload, now()],
+    )?;
+    Ok(())
 }
 
 fn validate_key(value: &str, label: &str) -> Result<String> {
@@ -546,6 +560,36 @@ mod tests {
             .unwrap();
         assert!(store.has_capability("filesystem.read").unwrap());
         assert!(store.create_approval("filesystem.delete", "Migration test").is_ok());
+    }
+
+    #[test]
+    fn capability_grant_rolls_back_when_audit_insert_fails() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        store.conn.execute_batch(
+            "CREATE TRIGGER reject_capability_audit
+             BEFORE INSERT ON events
+             WHEN NEW.event_type='capability.granted'
+             BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
+        ).unwrap();
+        assert!(store
+            .grant_capability("filesystem.read", "must be audited")
+            .is_err());
+        assert!(!store.has_capability("filesystem.read").unwrap());
+    }
+
+    #[test]
+    fn approval_creation_rolls_back_when_audit_insert_fails() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        store.conn.execute_batch(
+            "CREATE TRIGGER reject_approval_audit
+             BEFORE INSERT ON events
+             WHEN NEW.event_type='approval.requested'
+             BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
+        ).unwrap();
+        assert!(store
+            .create_approval("filesystem.delete", "must be audited")
+            .is_err());
+        assert!(store.list_approvals().unwrap().is_empty());
     }
 
     #[test]
