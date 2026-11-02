@@ -4,7 +4,7 @@ This document is the execution companion to [the planning specification](./COMPU
 
 **Current status: PARTIAL — early core prototype; all release gates remain open.**
 
-Latest fully verified slice: commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9` passed Windows and Ubuntu CI run `41398076332` (fmt, Clippy, tests, release build), including the IPC lifecycle test. The newer capability/approval code is awaiting CI.
+Latest inspected CI evidence: run `41400537374` for commit `41535003f409c12bad2138825ce2a31712a64f7c` passed Node validation and all Ubuntu Rust stages; Windows passed fmt/Clippy and its tests/build were in progress at last inspection. Later commits still need a complete green run on current HEAD.
 **Implementation authorization phrase:** `START THE BUILD`
 
 ## Rules for the eventual build
@@ -44,16 +44,16 @@ Latest fully verified slice: commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9` p
 
 ### Gate 2 — Intelligence adapters
 - [ ] Separate model-provider and agent-engine interfaces.
-- [ ] Qoder provider and Agent SDK adapters are independently configurable.
-- [ ] Official authentication only; account quota behavior verified.
+- [ ] Qoder provider and Agent SDK adapters are independently configurable (optional Agent SDK worker/CLI integration exists; a separate model-provider adapter is not yet implemented).
+- [ ] Official authentication only; account quota behavior verified (worker uses qodercliAuth; auth and usage have not been tested on the owner's device).
 - [ ] Capability-aware quality-first model routing.
 - [ ] Hard zero-spend mode and queue/resume behavior.
 - [ ] Provider outage and context handoff tests.
 
 ### Gate 3 — Tool and safety gateway
-- [ ] Typed tool registry and platform capability declarations.
+- [ ] Typed tool registry and platform capability declarations (initial workspace list/read tools exist; OS adapters and broader tools remain open).
 - [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approval records, audit events and policy evaluator are implemented; no tool executor/gateway yet, and latest policy changes are awaiting CI).
-- [ ] Sandboxed execution and secret redaction.
+- [ ] Sandboxed execution and secret redaction (canonical workspace path checks exist but are not an OS sandbox; race hardening and comprehensive redaction remain open).
 - [ ] Cancellation, timeouts and side-effect classification.
 - [ ] Local emergency stop works offline.
 
