@@ -95,11 +95,11 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
 }
 
 /// Remove startup registration while preserving Fairy's database and configuration.
-pub async fn uninstall(data_dir: &Path) -> Result<String> {
+pub async fn uninstall(_data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
-        if crate::ipc::is_running(data_dir).await {
-            crate::ipc::request(data_dir, crate::ipc::IpcCommand::Shutdown).await?;
+        if crate::ipc::is_running(_data_dir).await {
+            crate::ipc::request(_data_dir, crate::ipc::IpcCommand::Shutdown).await?;
         }
         let status = Command::new("schtasks")
             .args(["/Delete", "/TN", WINDOWS_TASK, "/F"])
