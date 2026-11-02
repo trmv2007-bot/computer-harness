@@ -155,10 +155,19 @@ async function main() {
     tools: [listTool, readTextTool],
   });
 
+  // Ask qodercli to stop gracefully before the Rust parent enforces its
+  // five-minute hard process timeout.
+  const abortController = new AbortController();
+  const abortTimer = setTimeout(() => {
+    emit("notice", { message: "Qoder task reached its 4m30s limit; requesting graceful cancellation." });
+    abortController.abort();
+  }, 270_000);
+
   const q = query({
     prompt: input.prompt,
     options: {
       auth: qodercliAuth(),
+      abortController,
       cwd: workspaceRoot,
       systemPrompt: [
         "You are Fairy, the computer companion in Computer Harness.",
@@ -247,6 +256,7 @@ async function main() {
       emit("usage", { available: false });
     }
   } finally {
+    clearTimeout(abortTimer);
     await q.close().catch(() => {});
     await shutdownDaemon().catch(() => {});
   }
