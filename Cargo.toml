@@ -21,7 +21,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 uuid = { version = "1.11", features = ["v4"] }
 
-[dev-dependencies]\ntempfile = "3.14"\n\n[profile.release]
+[dev-dependencies]
+tempfile = "3.14"
+
+[profile.release]
 opt-level = 3
 lto = "thin"
 codegen-units = 1
