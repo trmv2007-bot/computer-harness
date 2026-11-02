@@ -13,6 +13,15 @@ import { join } from "node:path";
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_PROMPT_BYTES = 32 * 1024;
+const MAX_INPUT_BYTES = 64 * 1024;
+const VALID_PROFILE_IDS = new Set([
+  "fairy",
+  "engineer",
+  "researcher",
+  "operator",
+  "auditor",
+  "archivist",
+]);
 
 function emit(type, fields = {}) {
   process.stdout.write(`${JSON.stringify({ type, ...fields })}\n`);
@@ -28,8 +37,8 @@ async function readInput() {
   let raw = "";
   for await (const chunk of process.stdin) {
     raw += chunk.toString("utf8");
-    if (Buffer.byteLength(raw, "utf8") > MAX_PROMPT_BYTES + 1024) {
-      throw new Error("Agent request exceeds the 32 KiB prompt limit");
+    if (Buffer.byteLength(raw, "utf8") > MAX_INPUT_BYTES) {
+      throw new Error("Agent request exceeds the 64 KiB input limit");
     }
   }
   const input = JSON.parse(raw);
@@ -39,7 +48,31 @@ async function readInput() {
   if (Buffer.byteLength(input.prompt, "utf8") > MAX_PROMPT_BYTES) {
     throw new Error("Prompt exceeds the 32 KiB limit");
   }
-  return input;
+  const profile = input.profile;
+  if (!profile || typeof profile !== "object" || !VALID_PROFILE_IDS.has(profile.id)) {
+    throw new Error("Agent request must contain a known Fairy specialist profile");
+  }
+  for (const field of ["title", "mission", "current_scope"]) {
+    if (typeof profile[field] !== "string" || profile[field].trim().length === 0) {
+      throw new Error(`Specialist profile is missing ${field}`);
+    }
+  }
+  if (!Array.isArray(profile.skills) || profile.skills.length === 0 ||
+      !profile.skills.every((skill) =>
+        skill && typeof skill.id === "string" &&
+        typeof skill.title === "string" &&
+        typeof skill.instructions === "string")) {
+    throw new Error("Specialist profile must include valid built-in skill playbooks");
+  }
+  if (!Array.isArray(profile.operating_rules) ||
+      !profile.operating_rules.every((rule) => typeof rule === "string")) {
+    throw new Error("Specialist profile operating rules are invalid");
+  }
+  if (!Array.isArray(profile.tool_scope) ||
+      !profile.tool_scope.every((tool) => typeof tool === "string")) {
+    throw new Error("Specialist profile tool scope is invalid");
+  }
+  return { prompt: input.prompt, profile };
 }
 
 async function createIpcClient() {
@@ -108,6 +141,12 @@ async function main() {
   const input = await readInput();
   const workspaceRoot = requireEnv("FAIRY_WORKSPACE_ROOT");
   const ipc = await createIpcClient();
+  const profile = input.profile;
+  emit("profile", {
+    id: profile.id,
+    title: profile.title,
+    skills: profile.skills.map((skill) => skill.id),
+  });
 
   const listTool = tool(
     "filesystem_list",
@@ -170,12 +209,21 @@ async function main() {
       abortController,
       cwd: workspaceRoot,
       systemPrompt: [
-        "You are Fairy, the computer companion in Computer Harness.",
+        "You are Fairy, the computer companion in Computer Harness, operating under one built-in specialist profile.",
+        `Active specialist: ${profile.title} (${profile.id}).`,
+        `Mission: ${profile.mission}`,
+        `Current capability limits: ${profile.current_scope}`,
+        "Integrated skill playbooks (apply these as working methods, not as claims of extra tools):",
+        ...profile.skills.map((skill) => `- ${skill.title} [${skill.id}]: ${skill.instructions}`),
+        "Profile-specific operating rules:",
+        ...profile.operating_rules.map((rule) => `- ${rule}`),
+        "Declared tool scope:",
+        ...profile.tool_scope.map((toolName) => `- ${toolName}`),
         "Be honest, precise, proactive within the provided capabilities, and clear about uncertainty.",
-        "Only the Fairy MCP tools are available. Do not claim to have used a capability unless its tool call succeeded.",
+        "Only the Fairy MCP tools configured below are actually callable. Do not claim to have used a capability unless its tool call succeeded.",
         "The available tools are read-only and restricted to the configured workspace. You cannot edit files, run shell commands, browse the web, or contact external services.",
         "Do not request secrets. Do not infer that Qoder inference is unlimited or free; report quota information only when the SDK supplies it.",
-      ].join("\n"),
+      ].join("\\n"),
       tools: [
         "mcp__fairy__filesystem_list",
         "mcp__fairy__filesystem_read_text",
