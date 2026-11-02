@@ -1,7 +1,11 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{fs, path::{Path, PathBuf}, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
@@ -43,11 +47,19 @@ pub struct Response {
 
 impl Response {
     fn success(message: impl Into<String>, data: Value) -> Self {
-        Self { ok: true, message: message.into(), data }
+        Self {
+            ok: true,
+            message: message.into(),
+            data,
+        }
     }
 
     fn failure(message: impl Into<String>) -> Self {
-        Self { ok: false, message: message.into(), data: Value::Null }
+        Self {
+            ok: false,
+            message: message.into(),
+            data: Value::Null,
+        }
     }
 }
 
@@ -67,7 +79,10 @@ pub async fn serve(data_dir: &Path, db_path: PathBuf) -> Result<()> {
         .context("read local IPC token")?
         .trim()
         .to_owned();
-    anyhow::ensure!(token.len() >= 32, "local IPC token is invalid; remove ipc-token and restart");
+    anyhow::ensure!(
+        token.len() >= 32,
+        "local IPC token is invalid; remove ipc-token and restart"
+    );
 
     let endpoint_path = data_dir.join(ENDPOINT_FILE);
     if endpoint_path.exists() {
@@ -132,7 +147,10 @@ pub async fn request(data_dir: &Path, action: IpcCommand) -> Result<Response> {
         .context("timed out connecting to Fairy control plane")?
         .context("could not connect to Fairy control plane")?;
 
-    let request = Request { token: token.trim().to_owned(), action };
+    let request = Request {
+        token: token.trim().to_owned(),
+        action,
+    };
     let mut encoded = serde_json::to_vec(&request)?;
     encoded.push(b'\n');
     stream.write_all(&encoded).await?;
@@ -141,12 +159,18 @@ pub async fn request(data_dir: &Path, action: IpcCommand) -> Result<Response> {
     let mut line = String::new();
     let read = timeout(
         Duration::from_secs(3),
-        BufReader::new(stream).take(MAX_REQUEST_BYTES as u64).read_line(&mut line),
+        BufReader::new(stream)
+            .take(MAX_REQUEST_BYTES as u64)
+            .read_line(&mut line),
     )
     .await
     .context("timed out waiting for Fairy control plane response")??;
-    anyhow::ensure!(read > 0, "Fairy control plane closed the connection without a response");
-    let response: Response = serde_json::from_str(&line).context("invalid control plane response")?;
+    anyhow::ensure!(
+        read > 0,
+        "Fairy control plane closed the connection without a response"
+    );
+    let response: Response =
+        serde_json::from_str(&line).context("invalid control plane response")?;
     anyhow::ensure!(response.ok, "{}", response.message);
     Ok(response)
 }
@@ -179,13 +203,11 @@ async fn handle_client(
     Ok(())
 }
 
-async fn dispatch(
-    action: IpcCommand,
-    db_path: PathBuf,
-    shutdown: watch::Sender<bool>,
-) -> Response {
+async fn dispatch(action: IpcCommand, db_path: PathBuf, shutdown: watch::Sender<bool>) -> Response {
     match action {
-        IpcCommand::Ping => Response::success("control plane is running", json!({"state":"running"})),
+        IpcCommand::Ping => {
+            Response::success("control plane is running", json!({"state":"running"}))
+        }
         IpcCommand::Shutdown => {
             // Allow the response to leave the socket before the accept loop exits.
             tokio::spawn(async move {
@@ -207,7 +229,10 @@ async fn dispatch(
                         Ok(json!(store.create_task(&title, &objective)?))
                     }
                     IpcCommand::CancelTask { id } => {
-                        anyhow::ensure!(store.cancel_task(&id)?, "task not found or no longer cancellable");
+                        anyhow::ensure!(
+                            store.cancel_task(&id)?,
+                            "task not found or no longer cancellable"
+                        );
                         Ok(json!({"id":id,"state":"cancelled"}))
                     }
                     IpcCommand::SetTaskState { id, state } => {
@@ -240,7 +265,6 @@ fn restrict_token_permissions(_path: &Path) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,7 +284,10 @@ mod tests {
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        assert!(endpoint.exists(), "control plane did not publish its endpoint");
+        assert!(
+            endpoint.exists(),
+            "control plane did not publish its endpoint"
+        );
 
         let ping = request(&data_dir, IpcCommand::Ping).await.unwrap();
         assert_eq!(ping.data["state"], "running");
@@ -291,6 +318,9 @@ mod tests {
 
         request(&data_dir, IpcCommand::Shutdown).await.unwrap();
         server.await.unwrap().unwrap();
-        assert!(!endpoint.exists(), "control plane endpoint should be removed on shutdown");
+        assert!(
+            !endpoint.exists(),
+            "control plane endpoint should be removed on shutdown"
+        );
     }
 }
