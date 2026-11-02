@@ -3,6 +3,7 @@ mod ipc;
 mod policy;
 mod service;
 mod store;
+mod stop;
 mod team;
 mod tools;
 
@@ -286,9 +287,9 @@ async fn agent_ask(
     prompt: &str,
 ) -> Result<AgentOutcome> {
     const AGENT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-    let stop_marker = data_dir.join("STOP_ALL");
+    let stop_latch = stop::StopLatch::new(data_dir);
     anyhow::ensure!(
-        !stop_marker.exists(),
+        !stop_latch.is_stopped(),
         "Fairy agent work is stopped; run 'fairy resume' before starting another agent request"
     );
 
@@ -366,7 +367,7 @@ async fn agent_ask(
             let line = tokio::select! {
                 line = lines.next_line() => line?,
                 _ = stop_poll.tick() => {
-                    if stop_marker.exists() {
+                    if stop_latch.is_stopped() {
                         let _ = child.start_kill();
                         let _ = child.wait().await;
                         anyhow::bail!("Qoder worker cancelled by 'fairy stop-all'");
@@ -484,6 +485,14 @@ async fn main() -> Result<()> {
             println!("config_dir={}", config_dir.display());
             println!("database=ok ({})", db_path.display());
             println!("task_count={}", store.list_tasks()?.len());
+            println!(
+                "agent_work={}",
+                if stop::StopLatch::new(&data_dir).is_stopped() {
+                    "stopped"
+                } else {
+                    "enabled"
+                }
+            );
             println!("provider_authentication=not_configured");
             println!("computer_control=not_implemented");
             println!("persistent_service=foreground_control_plane_available");
@@ -728,15 +737,14 @@ async fn main() -> Result<()> {
             }
         }
         Command::StopAll => {
-            let marker = data_dir.join("STOP_ALL");
-            fs::write(&marker, format!("{}\n", uuid::Uuid::new_v4()))?;
-            info!(path = %marker.display(), "emergency stop latch enabled");
-            println!("Emergency stop enabled. Active Fairy Qoder workers will be terminated by their supervisors; new agent requests are blocked until 'fairy resume'.");
+            let latch = stop::StopLatch::new(&data_dir);
+            latch.activate()?;
+            info!("emergency stop latch enabled");
+            println!("Emergency stop enabled. Active Fairy Qoder workers will be terminated by their supervisors; new agent requests are blocked until 'fairy resume'. Unrelated applications are not affected.");
         }
         Command::Resume => {
-            let marker = data_dir.join("STOP_ALL");
-            if marker.exists() {
-                fs::remove_file(&marker)?;
+            let latch = stop::StopLatch::new(&data_dir);
+            if latch.resume()? {
                 println!("Fairy agent work resumed.");
             } else {
                 println!("Fairy agent work was already enabled.");
