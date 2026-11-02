@@ -26,10 +26,20 @@ const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 pub enum IpcCommand {
     Ping,
     ListTasks,
-    GetTask { id: String },
-    CreateTask { title: String, objective: String },
-    CancelTask { id: String },
-    SetTaskState { id: String, state: String },
+    GetTask {
+        id: String,
+    },
+    CreateTask {
+        title: String,
+        objective: String,
+    },
+    CancelTask {
+        id: String,
+    },
+    SetTaskState {
+        id: String,
+        state: String,
+    },
     ExecuteTool {
         name: String,
         input_json: String,
