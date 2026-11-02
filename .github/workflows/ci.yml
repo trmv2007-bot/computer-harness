@@ -25,3 +25,15 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-targets
       - run: cargo build --release
+
+  node-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate Qoder worker syntax
+        run: node --check agent/qoder-worker.mjs
+      - name: Validate Qoder worker package manifest
+        run: node -e "const p=require('./agent/package.json'); if (p.dependencies['@qoder-ai/qoder-agent-sdk'] !== '1.0.58' || p.engines.node !== '>=18') process.exit(1)"
