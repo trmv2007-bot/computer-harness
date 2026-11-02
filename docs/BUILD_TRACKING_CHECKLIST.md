@@ -2,7 +2,9 @@
 
 This document is the execution companion to [the planning specification](./COMPUTER_HARNESS_PLANNING_SPEC.md).
 
-**Current status: PARTIAL — early core prototype; all release gates remain open.**\n\nLatest evidence: commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9` passed Windows and Ubuntu CI run `41398076332` (fmt, Clippy, tests, release build), including the new IPC end-to-end lifecycle test.  
+**Current status: PARTIAL — early core prototype; all release gates remain open.**
+
+Latest fully verified slice: commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9` passed Windows and Ubuntu CI run `41398076332` (fmt, Clippy, tests, release build), including the IPC lifecycle test. The newer capability/approval code is awaiting CI.
 **Implementation authorization phrase:** `START THE BUILD`
 
 ## Rules for the eventual build
@@ -50,7 +52,7 @@ This document is the execution companion to [the planning specification](./COMPU
 
 ### Gate 3 — Tool and safety gateway
 - [ ] Typed tool registry and platform capability declarations.
-- [ ] Permission checks, approval workflow and audit trail.
+- [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approval records, audit events and policy evaluator are implemented; no tool executor/gateway yet, and latest policy changes are awaiting CI).
 - [ ] Sandboxed execution and secret redaction.
 - [ ] Cancellation, timeouts and side-effect classification.
 - [ ] Local emergency stop works offline.
