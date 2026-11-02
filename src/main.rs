@@ -1,3 +1,4 @@
+mod ipc;
 mod store;
 
 use anyhow::Result;
@@ -26,8 +27,10 @@ enum Command {
     Doctor,
     /// Print machine-readable runtime information.
     Status,
-    /// Run the foreground supervisor shell.
-    Run,
+    /// Run the local control plane in the foreground.
+    Serve,
+    /// Inspect or stop the local control plane.
+    Daemon {\n        #[command(subcommand)]\n        action: DaemonCommand,\n    },\n    /// Run the foreground supervisor shell.\n    Run,
     /// Manage durable objectives.
     Task {
         #[command(subcommand)]
@@ -37,8 +40,7 @@ enum Command {
     StopAll,
 }
 
-#[derive(Subcommand)]
-enum TaskCommand {
+#[derive(Subcommand)]\nenum DaemonCommand {\n    /// Check whether the local control plane is reachable.\n    Status,\n    /// Ask the local control plane to stop.\n    Shutdown,\n}\n\n#[derive(Subcommand)]\nenum TaskCommand {
     /// Create a durable queued task.
     Create { title: String, objective: String },
     /// List tasks, newest first.
@@ -146,7 +148,7 @@ async fn main() -> Result<()> {
             info!(path = %marker.display(), "emergency stop marker written");
             println!("Stop request recorded. Active worker termination is unavailable until the worker supervisor is implemented.");
         }
-        Command::Run => {
+        Command::Serve => {\n            ipc::serve(&data_dir, db_path).await?;\n        }\n        Command::Daemon { action } => match action {\n            DaemonCommand::Status => {\n                let response = ipc::request(&data_dir, ipc::IpcCommand::Ping).await?;\n                print_json(&response)?;\n            }\n            DaemonCommand::Shutdown => {\n                let response = ipc::request(&data_dir, ipc::IpcCommand::Shutdown).await?;\n                print_json(&response)?;\n            }\n        },\n        Command::Run => {
             let marker = data_dir.join("STOP_ALL");
             if marker.exists() {
                 fs::remove_file(&marker)?;
