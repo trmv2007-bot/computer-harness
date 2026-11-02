@@ -29,6 +29,11 @@ pub enum IpcCommand {
     CreateTask { title: String, objective: String },
     CancelTask { id: String },
     SetTaskState { id: String, state: String },
+    ExecuteTool {
+        name: String,
+        input_json: String,
+        approval_id: Option<String>,
+    },
     Shutdown,
 }
 
@@ -251,6 +256,16 @@ async fn dispatch(action: IpcCommand, db_path: PathBuf, shutdown: watch::Sender<
                     IpcCommand::SetTaskState { id, state } => {
                         Ok(json!(store.transition_task(&id, &state)?))
                     }
+                    IpcCommand::ExecuteTool {
+                        name,
+                        input_json,
+                        approval_id,
+                    } => Ok(crate::tools::execute(
+                        &store,
+                        &name,
+                        &input_json,
+                        approval_id.as_deref(),
+                    )?),
                     IpcCommand::Ping | IpcCommand::Shutdown => unreachable!("handled above"),
                 }
             })
