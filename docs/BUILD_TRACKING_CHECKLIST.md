@@ -2,15 +2,15 @@
 
 This document is the execution companion to [the planning specification](./COMPUTER_HARNESS_PLANNING_SPEC.md).
 
-**Current status: NOT STARTED — planning only.**  
+**Current status: PARTIAL — early core prototype; all release gates remain open.**  
 **Implementation authorization phrase:** `START THE BUILD`
 
 ## Rules for the eventual build
 
-- [ ] Read the complete planning specification before implementation.
+- [x] Read the planning specification (implementation must continue to preserve all requirements).
 - [ ] Convert every requirement into a tracked issue or task with an owner, dependency and acceptance criteria.
 - [ ] Resolve open decisions or record explicit, user-approved defaults.
-- [ ] Build in small, reviewable milestones.
+- [x] Build in small, reviewable milestones (prototype branch/PR is still draft).
 - [ ] Keep a requirements-to-code-to-test traceability matrix.
 - [ ] Never mark a feature complete based only on generated code or a model's claim.
 - [ ] Test the actual runtime on each supported platform; do not infer Android/Linux support from Windows tests.
