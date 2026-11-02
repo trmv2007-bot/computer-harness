@@ -487,6 +487,67 @@ mod tests {
             .is_err());
     }
 
+
+    #[test]
+    fn upgrades_existing_schema_v1_database_without_losing_tasks() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("legacy.sqlite3");
+        {
+            let legacy = Connection::open(&path).unwrap();
+            legacy
+                .execute_batch(
+                    "CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                     INSERT INTO schema_meta(key,value) VALUES('schema_version','1');
+                     CREATE TABLE tasks (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        objective TEXT NOT NULL,
+                        state TEXT NOT NULL CHECK(state IN ('queued','running','paused','completed','failed','cancelled')),
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                     );
+                     CREATE TABLE events (
+                        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+                        task_id TEXT,
+                        event_type TEXT NOT NULL,
+                        payload TEXT NOT NULL,
+                        created_at INTEGER NOT NULL,
+                        FOREIGN KEY(task_id) REFERENCES tasks(id)
+                     );
+                     CREATE TABLE approvals (
+                        id TEXT PRIMARY KEY,
+                        action TEXT NOT NULL,
+                        reason TEXT NOT NULL,
+                        state TEXT NOT NULL CHECK(state IN ('pending','approved','denied')),
+                        created_at INTEGER NOT NULL
+                     );
+                     INSERT INTO tasks(id,title,objective,state,created_at,updated_at)
+                     VALUES('legacy-task','Old task','Keep this task','queued',1,1);",
+                )
+                .unwrap();
+        }
+
+        let store = Store::open(&path).unwrap();
+        let version: String = store
+            .conn
+            .query_row(
+                "SELECT value FROM schema_meta WHERE key='schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, "2");
+        assert_eq!(
+            store.get_task("legacy-task").unwrap().unwrap().title,
+            "Old task"
+        );
+        store
+            .grant_capability("filesystem.read", "Migration test")
+            .unwrap();
+        assert!(store.has_capability("filesystem.read").unwrap());
+        assert!(store.create_approval("filesystem.delete", "Migration test").is_ok());
+    }
+
     #[test]
     fn rejects_empty_task_fields() {
         let store = Store::open(Path::new(":memory:")).unwrap();
