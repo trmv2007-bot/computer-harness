@@ -8,8 +8,9 @@ import {
 import { z } from "zod";
 import net from "node:net";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
-const MAX_RESPONSE_BYTES = 64 * 1024;
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_PROMPT_BYTES = 32 * 1024;
 
