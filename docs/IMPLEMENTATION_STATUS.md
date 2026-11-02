@@ -34,8 +34,8 @@ OS-managed background service/auto-start and reconnecting CLI client; task sched
 ## Verification evidence
 
 - Rust/Cargo are not installed in the authoring environment; local compilation and tests have not been run.
-- Previous hosted CI run for commit `95994a8fefc449b1b21389c989d980460a22f4d3` passed formatting, Clippy, unit tests and release builds on Windows and Ubuntu.
-- CI for the new IPC commit is pending; no claim is made that the IPC layer compiles until the run is observed.
+- Hosted CI run `41398076332` for commit `f06b47a6cf131178dfe00e502e50a8dd54ac01a9` passed on Windows and Ubuntu: formatting, Clippy, all unit/integration tests, and release builds.
+- The IPC lifecycle test passed on both CI runners (server startup, ping, create/get/list/cancel task, authenticated shutdown and endpoint cleanup).
 - Windows owner-device and iQOO Android validation have not been run.
 - No Qoder authentication or provider request has been made from this branch.
 
