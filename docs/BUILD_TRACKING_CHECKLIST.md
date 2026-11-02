@@ -2,7 +2,7 @@
 
 This document is the execution companion to [the planning specification](./COMPUTER_HARNESS_PLANNING_SPEC.md).
 
-**Current status: IN PROGRESS — initial Fairy 0.3.0 prototype integrated on `feat/fairy-runtime-0.3.0`; not merged or deployed.**  
+**Current status: IN PROGRESS — Fairy 0.3.0 artifact reviewed and mapped in documentation on `feat/fairy-runtime-0.3.0`; runtime source is not yet vendored in this repository, merged or deployed.**  
 **Implementation authorization:** Owner explicitly supplied `START THE BUILD` on 2026-11-02. This authorizes implementation but does not waive safety, cost, platform, testing or approval requirements.
 
 ## Current implementation snapshot
@@ -10,17 +10,17 @@ This document is the execution companion to [the planning specification](./COMPU
 | Gate | Status | Evidence / remaining work |
 |---|---|---|
 | 0 — Specification | Partial | Existing decisions/spec retained. Some architecture choices (Rust core, IPC, federation, resource budgets) remain open. |
-| 1 — Persistent CLI core | Partial | Fairy CLI/daemon, local API, SQLite memory, reminders and health/start-stop smoke are in the 0.3.0 bundle. Multi-client recovery, formal migrations and Windows idle-footprint measurements remain. |
-| 2 — Intelligence adapters | Partial | Qoder-backed Claude Code adapter client, stable transcript/session identity and fail-closed quota governor are implemented. Live account/auth/quota and independent Qoder provider-vs-Agent-SDK engine behavior remain unverified. |
-| 3 — Tool and safety gateway | Partial | Approval-gated desktop, browser, Android and recipe brokers; loopback API auth; explicit agent tool allowlists. Full OS sandboxing and Windows permission-abuse testing remain. |
-| 4 — Planning and concurrency | Partial | Initiative contracts, serialized Research → Delivery → Quality pipeline, isolated Git worktrees, checkpoints and configured verification commands. General dependency DAG, adaptive concurrency, broad locks, cancellation and task leases remain. |
-| 5 — Memory, skills and learning | Partial | SQLite/FTS5, deterministic concept-vector retrieval, optional user-supplied ONNX embeddings, skills/recipes. Provenance-complete hybrid scopes, encryption, offline sync/conflict resolution and deletion propagation remain. |
-| 6 — Windows-first node | Code prototype only | PowerShell scripts, Windows hotkey/HUD/SAPI adapters exist. No target-PC installation or physical Windows acceptance run yet. |
+| 1 — Persistent CLI core | Artifact evidence only | The separate 0.3.0 bundle contains a CLI/daemon, local API, SQLite memory and reminders; its Linux smoke is recorded in the artifact report. Source is not yet committed here; multi-client recovery, migrations and Windows footprint measurements remain. |
+| 2 — Intelligence adapters | Artifact evidence only | The separate bundle contains a Qoder-backed Claude Code client and fail-closed quota prototype. No live account/auth/quota test or independent Agent SDK engine validation has been run; source is not yet committed here. |
+| 3 — Tool and safety gateway | Artifact evidence only | The separate bundle contains approval-gated brokers and tool allowlists. Full OS sandboxing and Windows permission-abuse testing remain; source vendoring is pending. |
+| 4 — Planning and concurrency | Artifact evidence only | The separate bundle contains initiative contracts and a sequential Research → Delivery → Quality prototype. General dependency DAG, adaptive concurrency, broad locks, cancellation and leases remain; source vendoring is pending. |
+| 5 — Memory, skills and learning | Artifact evidence only | The separate bundle contains SQLite/FTS5, deterministic retrieval and optional user-supplied ONNX embeddings. Provenance-complete scopes, encryption, offline sync/conflict resolution and deletion propagation remain; source vendoring is pending. |
+| 6 — Windows-first node | Unverified artifact | Windows scripts and HUD/hotkey/SAPI adapters are reported in the separate bundle. No target-PC installation or physical Windows acceptance run; source vendoring is pending. |
 | 7 — Linux and Android nodes | Not started | Android control broker is not a native Android node. Native Linux/Android lifecycle and cross-platform contract tests are outstanding. |
 | 8 — Federation | Not started | No secure pairing, remote transport, relay, leases or offline node synchronization. |
 | 9 — Vision and research | Partial | Browser control, on-demand screenshot action, research-team profile and source-conscious workflow. No general visual-understanding model or live browser/device validation. |
 | 10 — Proactivity and self-development | Partial | Configured-root marker/AST discovery and guarded initiative pipeline. Open-ended discovery and isolated source self-development with canary promotion/rollback are incomplete. |
-| 11 — Performance, security and release | Partial | 94 offline tests, compile, clean-archive install/runtime smoke and packaging/privacy audit recorded. Real Windows/Linux/Android performance, Gaming Mode, threat-model review and end-to-end provider/device checks remain. |
+| 11 — Performance, security and release | Artifact-level evidence only | The separate bundle's report records 94 offline tests, compile and clean-archive smoke. These tests have not been run from this repository. Real Windows/Linux/Android performance, Gaming Mode, threat-model review and device/provider checks remain. |
 
 ## Rules for the build
 
@@ -143,8 +143,8 @@ This document is the execution companion to [the planning specification](./COMPU
 
 ### Gate 11 — Performance, security and release readiness
 
-- [x] 94 offline tests passed for Fairy 0.3.0 in Linux/Python 3.13.5.
-- [x] Fresh archive extraction, local install, daemon, authenticated API, memory/reminder smoke and clean stop passed.
+- [ ] Vendor Fairy 0.3.0 source into this repository and re-run its tests from the checked-in source (separate artifact report records 94 passes on Linux/Python 3.13.5).
+- [ ] Re-run fresh archive/source extraction, local install, daemon, authenticated API, memory/reminder smoke and clean stop from the repository artifact after vendoring.
 - [x] Package privacy scan excludes local credentials, personal memory and runtime state.
 - [ ] Run Windows, Linux and Android acceptance suites on actual target devices.
 - [ ] Measure Gaming Mode and idle/active CPU/RAM/GPU/disk/network budgets.
