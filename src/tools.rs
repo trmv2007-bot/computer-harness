@@ -179,10 +179,13 @@ fn current_directory() -> String {
 }
 
 fn list_directory(root: &Path, input_json: &str) -> Result<Value> {
-    let input: ListInput =
-        serde_json::from_str(input_json).context("filesystem.list input must be a JSON object with an optional path")?;
+    let input: ListInput = serde_json::from_str(input_json)
+        .context("filesystem.list input must be a JSON object with an optional path")?;
     let directory = resolve_workspace_path(root, &input.path)?;
-    anyhow::ensure!(directory.is_dir(), "requested workspace path is not a directory");
+    anyhow::ensure!(
+        directory.is_dir(),
+        "requested workspace path is not a directory"
+    );
 
     let mut entries = Vec::new();
     for entry in fs::read_dir(&directory).context("read workspace directory")? {
@@ -230,16 +233,20 @@ struct ReadInput {
 }
 
 fn read_text_file(root: &Path, input_json: &str) -> Result<Value> {
-    let input: ReadInput =
-        serde_json::from_str(input_json).context("filesystem.read_text requires a JSON path field")?;
+    let input: ReadInput = serde_json::from_str(input_json)
+        .context("filesystem.read_text requires a JSON path field")?;
     let file = resolve_workspace_path(root, &input.path)?;
     let metadata = fs::metadata(&file).context("inspect workspace file")?;
-    anyhow::ensure!(metadata.is_file(), "requested workspace path is not a regular file");
+    anyhow::ensure!(
+        metadata.is_file(),
+        "requested workspace path is not a regular file"
+    );
     anyhow::ensure!(
         metadata.len() <= MAX_TEXT_FILE_BYTES,
         "file exceeds the 1 MiB text-read limit"
     );
-    let text = fs::read_to_string(&file).context("file is not valid UTF-8 text or cannot be read")?;
+    let text =
+        fs::read_to_string(&file).context("file is not valid UTF-8 text or cannot be read")?;
     Ok(json!({
         "path": input.path,
         "size_bytes": metadata.len(),
@@ -268,7 +275,9 @@ mod tests {
     fn registry_is_typed_and_contains_only_bounded_read_tools() {
         let tools = list_tools();
         assert_eq!(tools.len(), 2);
-        assert!(tools.iter().all(|tool| tool.side_effect == SideEffect::ReadOnly));
+        assert!(tools
+            .iter()
+            .all(|tool| tool.side_effect == SideEffect::ReadOnly));
         assert!(tools.iter().any(|tool| tool.name == "filesystem.list"));
         assert!(tools.iter().any(|tool| tool.name == "filesystem.read_text"));
     }
