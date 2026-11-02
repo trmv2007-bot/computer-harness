@@ -67,7 +67,7 @@ Latest CI evidence must be refreshed against the current branch head after each 
 ### Gate 5 — Memory, skills and learning
 - [ ] Hybrid memory scopes and provenance.
 - [ ] Offline synchronization/conflict resolution.
-- [ ] Skill packaging, versioning and validation.
+- [ ] Skill packaging, versioning and validation (built-in team profiles and prompt playbooks exist; persistent executable/learned skills and replay validation remain open).
 - [ ] Context compression/restoration tests.
 - [ ] Inspection, correction, export and deletion behavior.
 
