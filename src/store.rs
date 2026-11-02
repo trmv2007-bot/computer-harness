@@ -294,7 +294,11 @@ impl Store {
             "INSERT INTO approvals(id,action,reason,state,created_at) VALUES(?1,?2,?3,'pending',?4)",
             params![approval.id, approval.action, approval.reason, approval.created_at],
         )?;
-        record_system_event_on(&tx, "approval.requested", &serde_json::to_string(&approval)?)?;
+        record_system_event_on(
+            &tx,
+            "approval.requested",
+            &serde_json::to_string(&approval)?,
+        )?;
         tx.commit()?;
         Ok(approval)
     }
@@ -501,7 +505,6 @@ mod tests {
             .is_err());
     }
 
-
     #[test]
     fn upgrades_existing_schema_v1_database_without_losing_tasks() {
         let directory = tempfile::tempdir().unwrap();
@@ -559,18 +562,23 @@ mod tests {
             .grant_capability("filesystem.read", "Migration test")
             .unwrap();
         assert!(store.has_capability("filesystem.read").unwrap());
-        assert!(store.create_approval("filesystem.delete", "Migration test").is_ok());
+        assert!(store
+            .create_approval("filesystem.delete", "Migration test")
+            .is_ok());
     }
 
     #[test]
     fn capability_grant_rolls_back_when_audit_insert_fails() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        store.conn.execute_batch(
-            "CREATE TRIGGER reject_capability_audit
+        store
+            .conn
+            .execute_batch(
+                "CREATE TRIGGER reject_capability_audit
              BEFORE INSERT ON events
              WHEN NEW.event_type='capability.granted'
              BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
-        ).unwrap();
+            )
+            .unwrap();
         assert!(store
             .grant_capability("filesystem.read", "must be audited")
             .is_err());
@@ -580,8 +588,10 @@ mod tests {
     #[test]
     fn approval_creation_rolls_back_when_audit_insert_fails() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        store.conn.execute_batch(
-            "CREATE TRIGGER reject_approval_audit
+        store
+            .conn
+            .execute_batch(
+                "CREATE TRIGGER reject_approval_audit
              BEFORE INSERT ON events
              WHEN NEW.event_type='approval.requested'
              BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
