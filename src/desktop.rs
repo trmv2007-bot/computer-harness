@@ -1,7 +1,7 @@
 use anyhow::Result;
-use serde_json::Value;
 #[cfg(windows)]
 use serde_json::json;
+use serde_json::Value;
 
 #[cfg(windows)]
 const MAX_VISIBLE_WINDOWS: usize = 200;
