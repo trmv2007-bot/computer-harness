@@ -7,17 +7,17 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 ## Implemented in this branch
 
 - Rust CLI with diagnostics, local status, control-plane, tasks, workspace, capabilities, approvals, registered tools and optional agent commands.
-- SQLite WAL store (schema v3), durable task records, lifecycle transitions, event log, capability grants, action-scoped approvals and workspace settings.
+- SQLite WAL store (schema v4), durable tasks and execution attempts, event log, capability grants, action-scoped approvals and workspace settings, durable task records, lifecycle transitions, event log, capability grants, action-scoped approvals and workspace settings.
 - Foreground loopback control plane (`fairy serve`) with per-user token authentication, bounded requests/responses and task/tool RPC.
 - Explicit user-level startup service commands: Windows Task Scheduler at logon and Linux systemd user service with restart-on-failure. Installation is opt-in; it is never enabled implicitly.
 - Bounded IPC connection admission, request timeouts, Unix token-file permissions and a client response reader sized to the 8 MiB server limit.
-- Task create/state/cancel changes and their event records are committed atomically so audit failures roll back the mutation.
+- Task create/state/cancel and task execution lifecycle changes are committed atomically with their audit events; execution results and usage snapshots persist across CLI sessions.
 - Central policy evaluator: exact capability grants required; destructive/admin/external operations require scoped approval; paid and financial actions are denied by the default zero-spend rule.
-- Initial read-only workspace tools: `filesystem.list` and `filesystem.read_text`. Both require `filesystem.read`, reject workspace path escapes, enforce input/output bounds and append audit events.
-- Optional Qoder Agent SDK worker (`agent/`), pinned dependencies, custom MCP tools routed through Fairy's IPC gateway, and CLI setup/ask commands. It uses the local signed-in Qoder CLI session; it does not assume unlimited/free inference.
+- Initial read-only workspace tools: `filesystem.list` and `filesystem.read_text`. Both require `filesystem.read`, use cap-std directory handles to constrain access to the configured workspace, reject parent/absolute paths and external symlink escapes, enforce input/output bounds, block common credential paths and append audit events.
+- Optional Qoder Agent SDK worker (`agent/`), pinned dependencies, custom MCP tools routed through Fairy's IPC gateway, strict success/error result propagation, usage/quota reporting, and CLI setup/ask commands. It uses the local signed-in Qoder CLI session; it does not assume unlimited/free inference.
 - Automated CI: Rust formatting, Clippy, tests and release builds on Windows/Ubuntu; Node worker syntax/manifest validation.
 
-The current agent can inspect text files and list a configured workspace. It cannot edit files, run shell commands, control the desktop/browser, or perform arbitrary computer actions.
+The current agent can inspect non-sensitive text files and list a configured workspace. Queued tasks can be inspected with a one-shot read-only Qoder run; the output and usage are persisted, then the task pauses for owner review. It cannot edit files, run shell commands, control the desktop/browser, or perform arbitrary computer actions.
 
 ## Build
 
@@ -38,6 +38,7 @@ cargo run -- workspace set "C:/path/to/your/project"
 cargo run -- policy grant filesystem.read "Owner approved workspace read access"
 cargo run -- tool list
 cargo run -- agent setup
+cargo run -- task create "Inspect project" "Review the project structure and identify risks"
 
 # Either run in the foreground:
 cargo run -- serve
@@ -46,6 +47,10 @@ cargo run -- serve
 cargo run -- service install
 cargo run -- service status
 cargo run -- agent ask "Inspect this workspace and summarize its structure."
+cargo run -- task inspect <TASK_ID>
+cargo run -- task result <TASK_ID>
+# Review the persisted result before accepting it:
+cargo run -- task accept <TASK_ID>
 
 # To stop or remove the service:
 cargo run -- service stop
@@ -64,6 +69,6 @@ The service manager is implemented for Windows Task Scheduler and Linux systemd 
 
 ## Not implemented
 
-Crash recovery beyond OS service restart behavior; durable task scheduler/worker execution; multi-task concurrency, leases and checkpoints; provider/model routing and quota-aware pause/resume; Qoder account authentication/usage verification on owner device; write-capable tools; process sandboxing and full secret redaction; Windows/Linux desktop and browser control; Android adapter; vision/research pipeline; durable hybrid memory; skill engine; secure federation/pairing; notifications; Gaming Mode/resource governor; proactive monitoring; self-improvement; dashboard; installer/updater.
+Crash recovery for interrupted worker attempts; automatic task scheduling; multi-task concurrency, leases and checkpoints; provider/model routing and quota-aware pause/resume; Qoder account authentication/usage verification on owner device; write-capable tools; process sandboxing and comprehensive secret redaction; Windows/Linux desktop and browser control; Android adapter; vision/research pipeline; durable hybrid memory; skill engine; secure federation/pairing; notifications; Gaming Mode/resource governor; proactive monitoring; self-improvement; dashboard; installer/updater.
 
-No hosted inference service is assumed to be unlimited or zero-cost. Paid fallback is disabled. Workspace checks use canonical paths but are not an OS-enforced sandbox and are not yet hardened against path races.
+No hosted inference service is assumed to be unlimited or zero-cost. Paid fallback is disabled. Workspace filesystem access is rooted in cap-std directory capabilities; common credential paths are denied. This does not sandbox the entire Fairy process or protect against an already-compromised same-user process.
