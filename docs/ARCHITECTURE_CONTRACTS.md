@@ -40,8 +40,12 @@ Sensitive operations require an explicit capability grant and, where configured,
 ## Node contract
 Each node has a unique identity, local durable store, capability manifest and independently revocable credentials. Remote tasks use leases and idempotency keys. Reconnection must reconcile event histories without duplicating side effects. Transport must authenticate and encrypt peers; relay is optional and must not become a plaintext fallback.
 
-## Memory and skills
-Memory records require scope, provenance, timestamp, confidence and deletion/export semantics. Skills are versioned executable workflows with declared tools/permissions, replay tests and a rollback pointer. A learned skill is untrusted until validated.
+## Teams, memory and skills
+The built-in specialist catalogue currently provides Fairy Coordinator, Engineer, Researcher, Operator, Auditor and Archivist profiles. Each profile has a mission, operating rules, a declared read-only tool scope and selected prompt-based skill playbooks. Roles are selectable in the CLI; task inspection defaults to Auditor. These profiles do not yet launch separate agent processes or delegate concurrent work.
+
+The current playbooks (repository reconnaissance, bug triage, test design, security review, evidence-first reasoning, task decomposition, research synthesis, knowledge capture and safe operations planning) are prompt instructions, not executable or user-learned skill packages. They cannot add tools or capabilities. A future skill package requires versioning, declared tools/permissions, replay tests, provenance and rollback before it can be trusted.
+
+Memory records require scope, provenance, timestamp, confidence and deletion/export semantics. Durable hybrid memory, synchronization and retrieval are not implemented.
 
 ## Resource governor
 The governor uses measured per-device budgets and workload classes. It can defer or suspend optional workers, but cannot terminate user applications or change system-wide power/performance settings without authorization. Local inference remains disabled by default during Gaming Mode.
