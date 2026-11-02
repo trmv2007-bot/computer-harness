@@ -37,7 +37,7 @@ Latest CI evidence must be refreshed against the current branch head after each 
 ### Gate 1 — Persistent CLI core
 - [ ] CLI lifecycle and structured command output.
 - [ ] Persistent background runtime and reconnecting sessions (foreground loopback control plane, CLI RPC, opt-in Windows Task Scheduler and Linux systemd user-service registration exist; user-device lifecycle, crash/restart and reconnect recovery remain unverified).
-- [ ] Durable task/event store and persisted agent-attempt results with owner review (schema v4); automatic scheduling, checkpoints and crash recovery remain open.
+- [ ] Durable task/event store and persisted agent-attempt results with owner review (schema v4); idempotent startup recovery for interrupted attempts now exists; automatic scheduling, leases and checkpoints remain open.
 - [ ] Diagnostics, logs, configuration and migrations.
 - [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness for the persistent core.
 - [ ] Demonstrate that closing CLI sessions does not increase background resource consumption.
