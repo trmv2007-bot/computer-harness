@@ -32,10 +32,10 @@ Every tool registration must declare:
 - timeout, cancellation behavior and resource estimate;
 - evidence emitted and verification strategy.
 
-All invocations pass through a single permission gateway and append an audit event. Models never receive raw unrestricted shell or filesystem authority by default.
+Target rule: all invocations pass through a single permission gateway and append an audit event. Models never receive raw unrestricted shell or filesystem authority by default. Current implementation: exact-name capability grants, action-scoped approval records, one-time approval consumption storage and a side-effect policy evaluator exist. The CLI policy check is advisory only; there is no tool executor/gateway yet.
 
 ## Safety contract
-Sensitive operations require an explicit capability grant and, where configured, an interactive approval. Secrets are redacted from logs. Stop-all must work locally without network access and prevent new work from being admitted. A stop marker alone does not terminate already-running workers; a supervisor with cancellation tokens and process ownership is required before this feature can be called operational.
+Sensitive operations require an explicit capability grant and, where configured, an interactive approval. Destructive, administrator and external-communication effects require approval; financial and paid-inference actions are hard-denied by the current zero-spend policy. Approval records are action-scoped and support one-time consumption. Secrets are not yet comprehensively redacted from logs. Stop-all must work locally without network access and prevent new work from being admitted. A stop marker alone does not terminate already-running workers; a supervisor with cancellation tokens and process ownership is required before this feature can be called operational.
 
 ## Node contract
 Each node has a unique identity, local durable store, capability manifest and independently revocable credentials. Remote tasks use leases and idempotency keys. Reconnection must reconcile event histories without duplicating side effects. Transport must authenticate and encrypt peers; relay is optional and must not become a plaintext fallback.
