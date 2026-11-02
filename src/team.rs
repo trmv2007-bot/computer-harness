@@ -41,7 +41,7 @@ impl Role {
         let (mission, current_scope, skill_ids, operating_rules) = match self {
             Self::Fairy => (
                 "Coordinate the user's objective, clarify success criteria, structure work and report the next safe action.",
-                "Can reason, plan and inspect the configured workspace through read-only tools. It cannot yet dispatch independent workers or control the computer.",
+                "Can reason, plan and inspect the configured workspace through read-only tools. On Windows, it can also observe visible window metadata when desktop.observe is explicitly granted; it cannot click or type.",
                 &["task-decomposition", "evidence-first", "knowledge-capture"][..],
                 &[
                     "Own the overall objective and keep the user's constraints visible.",
@@ -71,7 +71,7 @@ impl Role {
             ),
             Self::Operator => (
                 "Diagnose device and application state, prepare safe operational procedures and identify the least disruptive next action.",
-                "Only read-only workspace listing and text reading are available to the agent. Desktop observation is not yet wired into this worker; no clicks, keystrokes, shell or settings changes are allowed.",
+                "Can inspect workspace files and, on Windows with an explicit desktop.observe grant, list visible top-level window metadata. It cannot click, type, launch applications, run shell commands or change settings.",
                 &["evidence-first", "safe-operations", "test-design"][..],
                 &[
                     "Treat system changes, process control, credentials and external communication as gated actions.",
@@ -107,6 +107,18 @@ impl Role {
             .filter_map(|id| catalog.iter().find(|skill| skill.id == *id).cloned())
             .collect();
 
+        let mut tool_scope = vec![
+            "filesystem.list — read-only listing within the configured workspace".to_owned(),
+            "filesystem.read_text — read-only UTF-8 text reads within the configured workspace"
+                .to_owned(),
+        ];
+        if cfg!(windows) && matches!(self, Self::Fairy | Self::Operator | Self::Auditor) {
+            tool_scope.push(
+                "desktop.list_windows — read-only visible window metadata; requires desktop.observe"
+                    .to_owned(),
+            );
+        }
+
         AgentProfile {
             id: self.id().to_owned(),
             title: self.title().to_owned(),
@@ -117,11 +129,7 @@ impl Role {
                 .iter()
                 .map(|rule| (*rule).to_owned())
                 .collect(),
-            tool_scope: vec![
-                "filesystem.list — read-only listing within the configured workspace".to_owned(),
-                "filesystem.read_text — read-only UTF-8 text reads within the configured workspace"
-                    .to_owned(),
-            ],
+            tool_scope,
         }
     }
 }
@@ -234,11 +242,22 @@ mod tests {
             assert!(!profile.current_scope.trim().is_empty());
             assert!(!profile.skills.is_empty());
             assert!(!profile.operating_rules.is_empty());
-            assert_eq!(profile.tool_scope.len(), 2);
-            assert!(profile
-                .tool_scope
-                .iter()
-                .all(|tool| tool.starts_with("filesystem.")));
+            let expected_tools = if cfg!(windows)
+                && matches!(
+                    profile.id.as_str(),
+                    "fairy" | "operator" | "auditor"
+                ) {
+                3
+            } else {
+                2
+            };
+            assert_eq!(profile.tool_scope.len(), expected_tools);
+            assert!(profile.tool_scope[0].starts_with("filesystem."));
+            assert!(profile.tool_scope[1].starts_with("filesystem."));
+            if expected_tools == 3 {
+                assert!(profile.tool_scope[2].contains("desktop.list_windows"));
+                assert!(profile.tool_scope[2].contains("desktop.observe"));
+            }
         }
     }
 
@@ -247,7 +266,7 @@ mod tests {
         let researcher = Role::Researcher.profile();
         assert!(researcher.current_scope.contains("Internet search"));
         let operator = Role::Operator.profile();
-        assert!(operator.current_scope.contains("no clicks"));
+        assert!(operator.current_scope.contains("cannot click"));
         let archivist = Role::Archivist.profile();
         assert!(archivist.current_scope.contains("not implemented"));
         let engineer = Role::Engineer.profile();
