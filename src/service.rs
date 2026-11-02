@@ -1,9 +1,14 @@
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
-use std::{fs, path::{Path, PathBuf}};
+use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::{fs, path::PathBuf};
+#[cfg(any(windows, target_os = "linux"))]
 use tokio::process::Command;
 
+#[cfg(windows)]
 const WINDOWS_TASK: &str = "ComputerHarnessFairy";
+#[cfg(target_os = "linux")]
 const LINUX_UNIT: &str = "fairy.service";
 
 pub async fn install(_data_dir: &Path) -> Result<String> {
@@ -50,6 +55,7 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
 pub async fn uninstall(data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
+        let _ = data_dir;
         let status = Command::new("schtasks")
             .args(["/Delete", "/TN", WINDOWS_TASK, "/F"])
             .status()
@@ -81,6 +87,7 @@ pub async fn uninstall(data_dir: &Path) -> Result<String> {
 pub async fn start(data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
+        let _ = data_dir;
         let status = Command::new("schtasks")
             .args(["/Run", "/TN", WINDOWS_TASK])
             .status()
@@ -185,12 +192,13 @@ fn linux_unit_path() -> Result<PathBuf> {
     Ok(config_dir.join("systemd").join("user").join(LINUX_UNIT))
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn linux_unit_contents(executable: &Path) -> Result<String> {
     let executable = executable
         .to_str()
         .context("Fairy executable path is not valid UTF-8 for the systemd unit")?;
     anyhow::ensure!(
-        !executable.contains(['\n', '\r']),
+        !executable.contains('\n') && !executable.contains('\r'),
         "Fairy executable path contains a line break"
     );
     let escaped = executable
@@ -215,7 +223,7 @@ async fn systemctl(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 
