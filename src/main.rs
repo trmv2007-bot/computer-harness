@@ -533,7 +533,15 @@ async fn main() -> Result<()> {
                         task.title, task.objective
                     );
                     let run = store.start_task_run(&id, &prompt)?;
-                    match agent_ask(&agent_dir, &data_dir, &store, &team::Role::Auditor.profile(), &prompt).await {
+                    match agent_ask(
+                        &agent_dir,
+                        &data_dir,
+                        &store,
+                        &team::Role::Auditor.profile(),
+                        &prompt,
+                    )
+                    .await
+                    {
                         Ok(outcome) => {
                             let finished = store.finish_task_run(
                                 &run.id,
@@ -689,7 +697,8 @@ async fn main() -> Result<()> {
                 AgentCommand::Ask { prompt, role } => {
                     let profile = role.profile();
                     eprintln!("Fairy specialist: {} ({})", profile.title, profile.id);
-                    let _outcome = agent_ask(&agent_dir, &data_dir, &store, &profile, &prompt).await?;
+                    let _outcome =
+                        agent_ask(&agent_dir, &data_dir, &store, &profile, &prompt).await?;
                 }
             }
         }
