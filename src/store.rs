@@ -272,7 +272,10 @@ impl Store {
         let action = validate_key(action, "approval action")?;
         let reason = reason.trim();
         anyhow::ensure!(!reason.is_empty(), "approval reason cannot be empty");
-        anyhow::ensure!(reason.len() <= 2000, "approval reason must be 2000 bytes or fewer");
+        anyhow::ensure!(
+            reason.len() <= 2000,
+            "approval reason must be 2000 bytes or fewer"
+        );
         let approval = Approval {
             id: uuid::Uuid::new_v4().to_string(),
             action,
@@ -284,10 +287,7 @@ impl Store {
             "INSERT INTO approvals(id,action,reason,state,created_at) VALUES(?1,?2,?3,'pending',?4)",
             params![approval.id, approval.action, approval.reason, approval.created_at],
         )?;
-        self.record_system_event(
-            "approval.requested",
-            &serde_json::to_string(&approval)?,
-        )?;
+        self.record_system_event("approval.requested", &serde_json::to_string(&approval)?)?;
         Ok(approval)
     }
 
@@ -431,7 +431,6 @@ mod tests {
         assert_eq!(store.event_count().unwrap(), 3);
     }
 
-
     #[test]
     fn grants_are_explicit_reversible_and_audited() {
         let store = Store::open(Path::new(":memory:")).unwrap();
@@ -452,21 +451,35 @@ mod tests {
         let approval = store
             .create_approval("filesystem.delete", "Delete generated build output")
             .unwrap();
-        assert!(!store.approval_is_approved(&approval.id, "filesystem.delete").unwrap());
+        assert!(!store
+            .approval_is_approved(&approval.id, "filesystem.delete")
+            .unwrap());
         assert!(store.resolve_approval(&approval.id, true).unwrap());
         assert!(!store.resolve_approval(&approval.id, false).unwrap());
-        assert!(!store.approval_is_approved(&approval.id, "process.kill").unwrap());
-        assert!(store.approval_is_approved(&approval.id, "filesystem.delete").unwrap());
-        assert!(store.consume_approval(&approval.id, "filesystem.delete").unwrap());
-        assert!(!store.consume_approval(&approval.id, "filesystem.delete").unwrap());
-        assert!(!store.approval_is_approved(&approval.id, "filesystem.delete").unwrap());
+        assert!(!store
+            .approval_is_approved(&approval.id, "process.kill")
+            .unwrap());
+        assert!(store
+            .approval_is_approved(&approval.id, "filesystem.delete")
+            .unwrap());
+        assert!(store
+            .consume_approval(&approval.id, "filesystem.delete")
+            .unwrap());
+        assert!(!store
+            .consume_approval(&approval.id, "filesystem.delete")
+            .unwrap());
+        assert!(!store
+            .approval_is_approved(&approval.id, "filesystem.delete")
+            .unwrap());
     }
 
     #[test]
     fn rejects_wildcard_and_invalid_capability_names() {
         let store = Store::open(Path::new(":memory:")).unwrap();
         assert!(store.grant_capability("*", "too broad").is_err());
-        assert!(store.grant_capability("shell;admin", "invalid syntax").is_err());
+        assert!(store
+            .grant_capability("shell;admin", "invalid syntax")
+            .is_err());
     }
 
     #[test]
