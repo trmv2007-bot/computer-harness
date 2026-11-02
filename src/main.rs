@@ -225,6 +225,14 @@ async fn agent_setup(agent_dir: &Path) -> Result<()> {
 
 async fn agent_ask(agent_dir: &Path, data_dir: &Path, store: &Store, prompt: &str) -> Result<()> {
     anyhow::ensure!(
+        prompt.len() <= 32 * 1024,
+        "prompt exceeds the 32 KiB Qoder worker limit"
+    );
+    anyhow::ensure!(
+        store.has_capability("filesystem.read")?,
+        "filesystem.read capability must be explicitly granted before starting Fairy's Qoder worker"
+    );
+    anyhow::ensure!(
         agent_dir
             .join("node_modules")
             .join("@qoder-ai")
