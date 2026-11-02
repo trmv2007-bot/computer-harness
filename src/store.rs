@@ -285,6 +285,53 @@ impl Store {
         Ok(run)
     }
 
+    /// Recover attempts left running by a process that exited unexpectedly.
+    /// Recovery is idempotent and commits task/run state with its audit events.
+    pub fn recover_interrupted_runs(&self) -> Result<usize> {
+        let tx = self.conn.unchecked_transaction()?;
+        let interrupted: Vec<(String, String)> = {
+            let mut stmt = tx.prepare(
+                "SELECT id,task_id FROM task_runs WHERE status='running' ORDER BY started_at",
+            )?;
+            let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+
+        let mut recovered = 0;
+        for (run_id, task_id) in interrupted {
+            let finished_at = now();
+            let error = "interrupted by runtime shutdown or process crash; explicit retry is required";
+            let changed = tx.execute(
+                "UPDATE task_runs SET status='failed',error=?2,finished_at=?3
+                 WHERE id=?1 AND status='running'",
+                params![run_id, error, finished_at],
+            )?;
+            if changed == 0 {
+                continue;
+            }
+            tx.execute(
+                "UPDATE tasks SET state='failed',updated_at=?2
+                 WHERE id=?1 AND state='running'",
+                params![task_id, finished_at],
+            )?;
+            record_task_event_on(
+                &tx,
+                &task_id,
+                "task.run_interrupted",
+                &serde_json::json!({"run_id":run_id,"reason":"runtime_recovery"}).to_string(),
+            )?;
+            record_task_event_on(
+                &tx,
+                &task_id,
+                "task.state_changed",
+                &serde_json::json!({"from":"running","to":"failed","reason":"runtime_recovery"}).to_string(),
+            )?;
+            recovered += 1;
+        }
+        tx.commit()?;
+        Ok(recovered)
+    }
+
     /// Record the provider outcome. Model success moves the task to paused for
     /// human review; it is never treated as proof that the objective is complete.
     pub fn finish_task_run(
@@ -884,6 +931,31 @@ mod tests {
             )
             .unwrap();
         assert_eq!(status, "running");
+    }
+
+    #[test]
+    fn recovers_interrupted_attempts_once_and_requires_explicit_retry() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("fairy.sqlite3");
+        let task_id;
+        {
+            let store = Store::open(&path).unwrap();
+            let task = store.create_task("Crash recovery", "Recover an interrupted worker").unwrap();
+            task_id = task.id.clone();
+            store.start_task_run(&task_id, "Inspect safely").unwrap();
+            assert_eq!(store.get_task(&task_id).unwrap().unwrap().state, "running");
+        }
+
+        let recovered = Store::open(&path).unwrap();
+        assert_eq!(recovered.recover_interrupted_runs().unwrap(), 1);
+        assert_eq!(recovered.recover_interrupted_runs().unwrap(), 0);
+        assert_eq!(recovered.get_task(&task_id).unwrap().unwrap().state, "failed");
+        let run = recovered.latest_task_run(&task_id).unwrap().unwrap();
+        assert_eq!(run.status, "failed");
+        assert!(run.error.unwrap().contains("explicit retry"));
+        assert_eq!(recovered.event_count().unwrap(), 4);
+        let retryable = recovered.transition_task(&task_id, "queued").unwrap();
+        assert_eq!(retryable.state, "queued");
     }
 
     #[test]
