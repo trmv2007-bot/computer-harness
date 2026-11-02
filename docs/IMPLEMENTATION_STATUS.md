@@ -17,6 +17,7 @@ Updated: 2026-11-02
 - Task CLI uses the control plane when reachable and otherwise falls back to local SQLite.
 - Central side-effect policy: exact capability grants required; destructive/admin/external actions require an action-scoped approval; paid inference and financial effects are denied by default.
 - Typed tool registry with filesystem.list and filesystem.read_text. Workspace-relative paths are validated and accessed through cap-std directory handles; parent traversal and external symlink escapes are denied; common credential paths are blocked; inputs/listings/text reads are bounded; unknown JSON properties are rejected; denied/started/completed/failed calls are audited.
+- Built-in specialist team profiles: Fairy Coordinator, Engineer, Researcher, Operator, Auditor and Archivist. Nine integrated prompt-based skill playbooks are selected per role and passed into the Qoder worker as structured profile context. Each profile declares its mission, operating rules, available tool scope and limitations. Task inspections use Auditor by default; CLI users can select a role explicitly.
 - Optional Qoder TypeScript SDK worker and Zod dependency pinned in agent/package.json. It reuses the local Qoder CLI sign-in via qodercliAuth(), exposes only Fairy MCP read tools, restricts the visible tool set, propagates explicit SDK success/error subtypes and error codes, and reports available account quota/session usage.
 - CLI launches the worker through a child Node process using agent setup and agent ask. Tasks can be inspected through a user-triggered read-only agent attempt; the attempt/result/usage are persisted, and successful provider completion leaves the task paused for owner review. Only explicit owner acceptance marks it complete.
 - Opt-in user service registration: Windows Task Scheduler at user logon and Linux systemd user unit with restart-on-failure; service status/start/stop/uninstall commands are exposed. No service is installed automatically.
@@ -24,20 +25,20 @@ Updated: 2026-11-02
 
 ## In progress / not verified
 
-- Run 41400537374 for commit 41535003f409c12bad2138825ce2a31712a64f7c passed Node validation and all Ubuntu Rust stages; Windows had passed fmt/Clippy and was still running tests/build at last inspection.
-- The current branch includes additional commits beyond the previously documented run; all subsequent commits require a fresh complete green CI run before these changes are marked verified.
+- Previous CI run 41400542922 passed the Windows and Ubuntu Rust fmt, Clippy, tests and release-build stages, plus Node syntax/manifest validation, for an earlier commit.
+- The specialist-team commits are newer than that run and require a fresh complete green CI run before this slice is marked verified.
 - Qoder npm installation, local authentication, actual model request, quota response and end-to-end tool call have not been exercised using the owner's signed-in Qoder account.
 - Windows owner-device and iQOO Android validation have not been run.
 
 ## Not implemented
 
-Owner-device validation of service install/start/stop/uninstall, Windows service crash recovery, systemd user-manager integration; interrupted task-run recovery; automatic task scheduling/worker queues, concurrency, checkpoints and leases; task leases, retries, checkpoints, dependency DAG and independent completion verification; separate model-provider and agent-engine adapter contracts in code; capability-aware model routing and quota/cost enforcement; provider pause/resume; write-capable tools; OS-level sandboxing; comprehensive secret redaction; reliable stop-all process cancellation; GUI/browser/vision/desktop control; Linux/Android OS adapters; hybrid memory and sync; skills; secure federation/pairing/relay; notifications; Gaming Mode/resource governor; proactive event monitoring; self-development and rollback; dashboard; installer/updater.
+Owner-device validation of service install/start/stop/uninstall, Windows service crash recovery, systemd user-manager integration; interrupted task-run recovery; automatic task scheduling/worker queues, concurrency, checkpoints and leases; task leases, retries, checkpoints, dependency DAG and independent completion verification; separate model-provider and agent-engine adapter contracts in code; capability-aware model routing and quota/cost enforcement; provider pause/resume; write-capable tools; OS-level sandboxing; comprehensive secret redaction; reliable stop-all process cancellation; GUI/browser/vision/desktop control; Linux/Android OS adapters; hybrid memory and sync; versioned, user-learned and replay-tested skill packages (the current specialist playbooks are built-in prompt instructions, not persistent executable skills); secure federation/pairing/relay; notifications; Gaming Mode/resource governor; proactive event monitoring; self-development and rollback; dashboard; installer/updater.
 
 ## Verification evidence and limitations
 
 - Rust/Cargo are not installed in the authoring environment, so local compilation/tests were not run.
 - CI run 41400537374 for commit 41535003f409c12bad2138825ce2a31712a64f7c: Node validation passed; Ubuntu formatting, Clippy, tests and release build passed; Windows formatting and Clippy passed and its tests/build were still in progress at last inspection.
-- Commits after 41535003 need a final CI run on current HEAD before this slice can be marked verified.
+- Commits after the last green run need a final CI run on current HEAD before this slice can be marked verified. The new specialist profile Rust tests and Qoder prompt integration have not yet been exercised against the owner's Qoder account.
 - Windows token file protection currently depends on inherited per-user AppData ACLs; explicit ACL hardening and manual verification remain open.
 - Workspace file access uses cap-std directory handles, which constrain relative reads and reject escapes through parent traversal/external symlinks. This does not sandbox all process capabilities or defend against a compromised same-user process; common secret path blocks are conservative but not comprehensive.
 - Service registration code has CI coverage only; it has not yet been installed or exercised on the owner's Windows PC or a Linux desktop.
