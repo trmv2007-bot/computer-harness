@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
-use std::{path::Path, time::Duration};
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
+use std::{path::Path, time::Duration};
 #[cfg(any(windows, target_os = "linux"))]
 use tokio::process::Command;
 
@@ -46,10 +46,15 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
                 .status()
                 .await
                 .context("start Fairy after registering its logon task")?;
-            anyhow::ensure!(start.success(), "could not start Fairy after installation: {start}");
+            anyhow::ensure!(
+                start.success(),
+                "could not start Fairy after installation: {start}"
+            );
             wait_for_runtime(_data_dir).await?;
         }
-        Ok(format!("Installed and started user logon task '{WINDOWS_TASK}'."))
+        Ok(format!(
+            "Installed and started user logon task '{WINDOWS_TASK}'."
+        ))
     }
 
     #[cfg(target_os = "linux")]

@@ -210,7 +210,6 @@ struct AgentOutcome {
     usage: Option<serde_json::Value>,
 }
 
-
 fn paths() -> Result<(PathBuf, PathBuf)> {
     let dirs = ProjectDirs::from("dev", "ComputerHarness", "Fairy")
         .ok_or_else(|| anyhow::anyhow!("could not determine per-user application directories"))?;
@@ -364,7 +363,10 @@ async fn agent_ask(
                 eprintln!("[Qoder usage] {}", event);
             }
             "error" => {
-                let message = event["message"].as_str().unwrap_or("unknown error").to_owned();
+                let message = event["message"]
+                    .as_str()
+                    .unwrap_or("unknown error")
+                    .to_owned();
                 eprintln!("[Qoder error] {message}");
                 final_error = Some(message);
             }
@@ -376,7 +378,9 @@ async fn agent_ask(
     if !status.success() {
         anyhow::bail!(
             "Qoder Agent worker exited unsuccessfully ({status}): {}",
-            final_error.as_deref().unwrap_or("no error detail was provided")
+            final_error
+                .as_deref()
+                .unwrap_or("no error detail was provided")
         );
     }
     if let Some(error) = final_error {
@@ -494,13 +498,8 @@ async fn main() -> Result<()> {
                         }
                         Err(error) => {
                             let detail = error.to_string();
-                            let _ = store.finish_task_run(
-                                &run.id,
-                                false,
-                                None,
-                                Some(&detail),
-                                None,
-                            );
+                            let _ =
+                                store.finish_task_run(&run.id, false, None, Some(&detail), None);
                             return Err(error);
                         }
                     }

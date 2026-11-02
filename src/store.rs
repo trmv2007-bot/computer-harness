@@ -296,7 +296,10 @@ impl Store {
         usage: Option<&Value>,
     ) -> Result<TaskRun> {
         if succeeded {
-            anyhow::ensure!(result.is_some(), "successful task runs must persist a result");
+            anyhow::ensure!(
+                result.is_some(),
+                "successful task runs must persist a result"
+            );
         } else {
             anyhow::ensure!(
                 error.is_some_and(|value| !value.trim().is_empty()),
@@ -304,7 +307,10 @@ impl Store {
             );
         }
         if let Some(text) = result {
-            anyhow::ensure!(text.len() <= 2 * 1024 * 1024, "task result exceeds the 2 MiB limit");
+            anyhow::ensure!(
+                text.len() <= 2 * 1024 * 1024,
+                "task result exceeds the 2 MiB limit"
+            );
         }
         if let Some(text) = error {
             anyhow::ensure!(text.len() <= 8192, "task error exceeds the 8 KiB limit");
@@ -314,7 +320,10 @@ impl Store {
         let finished_at = now();
         let usage_json = usage.map(serde_json::to_string).transpose()?;
         if let Some(serialized) = usage_json.as_deref() {
-            anyhow::ensure!(serialized.len() <= 4096, "task usage snapshot exceeds 4 KiB");
+            anyhow::ensure!(
+                serialized.len() <= 4096,
+                "task usage snapshot exceeds 4 KiB"
+            );
         }
 
         let tx = self.conn.unchecked_transaction()?;
@@ -328,14 +337,27 @@ impl Store {
         let changed = tx.execute(
             "UPDATE task_runs SET status=?2,result=?3,error=?4,usage_json=?5,finished_at=?6
              WHERE id=?1 AND status='running'",
-            params![run_id, next_run_state, result, error, usage_json, finished_at],
+            params![
+                run_id,
+                next_run_state,
+                result,
+                error,
+                usage_json,
+                finished_at
+            ],
         )?;
-        anyhow::ensure!(changed == 1, "task run changed concurrently; reload and retry");
+        anyhow::ensure!(
+            changed == 1,
+            "task run changed concurrently; reload and retry"
+        );
         let task_changed = tx.execute(
             "UPDATE tasks SET state=?2,updated_at=?3 WHERE id=?1 AND state='running'",
             params![task_id, next_task_state, finished_at],
         )?;
-        anyhow::ensure!(task_changed == 1, "task is no longer running; run result was not applied");
+        anyhow::ensure!(
+            task_changed == 1,
+            "task is no longer running; run result was not applied"
+        );
         record_task_event_on(
             &tx,
             &task_id,
@@ -345,7 +367,8 @@ impl Store {
                 "status":next_run_state,
                 "result_bytes":result.map(str::len),
                 "has_error":error.is_some()
-            }).to_string(),
+            })
+            .to_string(),
         )?;
         record_task_event_on(
             &tx,
@@ -753,8 +776,12 @@ mod tests {
     #[test]
     fn task_runs_persist_results_and_wait_for_owner_acceptance() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        let task = store.create_task("Inspect workspace", "Summarize the project structure").unwrap();
-        let run = store.start_task_run(&task.id, "Inspect the project read-only").unwrap();
+        let task = store
+            .create_task("Inspect workspace", "Summarize the project structure")
+            .unwrap();
+        let run = store
+            .start_task_run(&task.id, "Inspect the project read-only")
+            .unwrap();
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "running");
         assert!(!store.cancel_task(&task.id).unwrap());
 
@@ -771,10 +798,15 @@ mod tests {
         assert_eq!(finished.status, "succeeded");
         assert_eq!(finished.usage.as_ref().unwrap()["isQuotaExceeded"], false);
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "paused");
-        assert!(store.finish_task_run(&run.id, true, Some("duplicate"), None, None).is_err());
+        assert!(store
+            .finish_task_run(&run.id, true, Some("duplicate"), None, None)
+            .is_err());
 
         let latest = store.latest_task_run(&task.id).unwrap().unwrap();
-        assert_eq!(latest.result.as_deref(), Some("Project contains a Rust CLI and a Node worker."));
+        assert_eq!(
+            latest.result.as_deref(),
+            Some("Project contains a Rust CLI and a Node worker.")
+        );
         assert_eq!(
             store.transition_task(&task.id, "completed").unwrap().state,
             "completed"
@@ -784,21 +816,30 @@ mod tests {
     #[test]
     fn task_run_failures_mark_task_failed_and_can_be_retried_explicitly() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        let task = store.create_task("Inspect workspace", "Read a project file").unwrap();
-        let run = store.start_task_run(&task.id, "Read a project file").unwrap();
+        let task = store
+            .create_task("Inspect workspace", "Read a project file")
+            .unwrap();
+        let run = store
+            .start_task_run(&task.id, "Read a project file")
+            .unwrap();
         let finished = store
             .finish_task_run(&run.id, false, None, Some("Qoder quota unavailable"), None)
             .unwrap();
         assert_eq!(finished.status, "failed");
         assert_eq!(finished.error.as_deref(), Some("Qoder quota unavailable"));
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "failed");
-        assert_eq!(store.transition_task(&task.id, "queued").unwrap().state, "queued");
+        assert_eq!(
+            store.transition_task(&task.id, "queued").unwrap().state,
+            "queued"
+        );
     }
 
     #[test]
     fn task_run_start_and_finish_are_atomic_with_the_event_log() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        let task = store.create_task("Atomic run", "Test transaction boundaries").unwrap();
+        let task = store
+            .create_task("Atomic run", "Test transaction boundaries")
+            .unwrap();
         store
             .conn
             .execute_batch(
@@ -810,10 +851,16 @@ mod tests {
             .unwrap();
         assert!(store.start_task_run(&task.id, "Run prompt").is_err());
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "queued");
-        let run_count: i64 = store.conn.query_row("SELECT COUNT(*) FROM task_runs", [], |row| row.get(0)).unwrap();
+        let run_count: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM task_runs", [], |row| row.get(0))
+            .unwrap();
         assert_eq!(run_count, 0);
 
-        store.conn.execute_batch("DROP TRIGGER reject_task_run_started;").unwrap();
+        store
+            .conn
+            .execute_batch("DROP TRIGGER reject_task_run_started;")
+            .unwrap();
         let run = store.start_task_run(&task.id, "Run prompt").unwrap();
         store
             .conn
@@ -824,9 +871,18 @@ mod tests {
                  BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
             )
             .unwrap();
-        assert!(store.finish_task_run(&run.id, true, Some("result"), None, None).is_err());
+        assert!(store
+            .finish_task_run(&run.id, true, Some("result"), None, None)
+            .is_err());
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "running");
-        let status: String = store.conn.query_row("SELECT status FROM task_runs WHERE id=?1", [&run.id], |row| row.get(0)).unwrap();
+        let status: String = store
+            .conn
+            .query_row(
+                "SELECT status FROM task_runs WHERE id=?1",
+                [&run.id],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(status, "running");
     }
 

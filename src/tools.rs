@@ -273,8 +273,12 @@ fn ensure_not_sensitive_path(relative: &Path) -> Result<()> {
             || name.starts_with(".env.")
             || matches!(
                 name.as_str(),
-                "id_rsa" | "id_ed25519" | "id_ecdsa" | "credentials.json"
-                    | "secrets.json" | "authorized_keys"
+                "id_rsa"
+                    | "id_ed25519"
+                    | "id_ecdsa"
+                    | "credentials.json"
+                    | "secrets.json"
+                    | "authorized_keys"
             )
             || matches!(extension, "pem" | "key" | "p12" | "pfx" | "jks" | "kdbx");
         anyhow::ensure!(
@@ -419,7 +423,11 @@ mod tests {
         fs::create_dir(workspace.path().join("secrets")).unwrap();
         fs::write(workspace.path().join(".env"), "API_TOKEN=never-read").unwrap();
         fs::write(workspace.path().join("private.pem"), "private-key").unwrap();
-        fs::write(workspace.path().join("secrets").join("service.txt"), "secret").unwrap();
+        fs::write(
+            workspace.path().join("secrets").join("service.txt"),
+            "secret",
+        )
+        .unwrap();
         let store = configured_store(workspace.path(), true);
 
         for path in [".env", "private.pem", "secrets/service.txt", ".git/config"] {
