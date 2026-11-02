@@ -1,8 +1,13 @@
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::Value;
+#[cfg(windows)]
+use serde_json::json;
 
+#[cfg(windows)]
 const MAX_VISIBLE_WINDOWS: usize = 200;
+#[cfg(windows)]
 const MAX_TITLE_CHARS: usize = 512;
+#[cfg(windows)]
 const MAX_CLASS_CHARS: usize = 256;
 
 #[cfg(windows)]
