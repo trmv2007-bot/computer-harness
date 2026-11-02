@@ -30,7 +30,10 @@ enum Command {
     /// Run the local control plane in the foreground.
     Serve,
     /// Inspect or stop the local control plane.
-    Daemon {\n        #[command(subcommand)]\n        action: DaemonCommand,\n    },\n    /// Run the foreground supervisor shell.\n    Run,
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonCommand,
+    },\n    /// Run the foreground supervisor shell.\n    Run,
     /// Manage durable objectives.
     Task {
         #[command(subcommand)]
@@ -40,7 +43,16 @@ enum Command {
     StopAll,
 }
 
-#[derive(Subcommand)]\nenum DaemonCommand {\n    /// Check whether the local control plane is reachable.\n    Status,\n    /// Ask the local control plane to stop.\n    Shutdown,\n}\n\n#[derive(Subcommand)]\nenum TaskCommand {
+#[derive(Subcommand)]
+enum DaemonCommand {
+    /// Check whether the local control plane is reachable.
+    Status,
+    /// Ask the local control plane to stop.
+    Shutdown,
+}
+
+#[derive(Subcommand)]
+enum TaskCommand {
     /// Create a durable queued task.
     Create { title: String, objective: String },
     /// List tasks, newest first.
@@ -104,7 +116,7 @@ async fn main() -> Result<()> {
             println!("task_count={}", store.list_tasks()?.len());
             println!("provider_authentication=not_configured");
             println!("computer_control=not_implemented");
-            println!("persistent_service=not_implemented");
+            println!("persistent_service=foreground_control_plane_available");
         }
         Command::Status => {
             let status = Status {
@@ -148,7 +160,19 @@ async fn main() -> Result<()> {
             info!(path = %marker.display(), "emergency stop marker written");
             println!("Stop request recorded. Active worker termination is unavailable until the worker supervisor is implemented.");
         }
-        Command::Serve => {\n            ipc::serve(&data_dir, db_path).await?;\n        }\n        Command::Daemon { action } => match action {\n            DaemonCommand::Status => {\n                let response = ipc::request(&data_dir, ipc::IpcCommand::Ping).await?;\n                print_json(&response)?;\n            }\n            DaemonCommand::Shutdown => {\n                let response = ipc::request(&data_dir, ipc::IpcCommand::Shutdown).await?;\n                print_json(&response)?;\n            }\n        },\n        Command::Run => {
+        Command::Serve => {
+            ipc::serve(&data_dir, db_path).await?;
+        }
+        Command::Daemon { action } => match action {
+            DaemonCommand::Status => {
+                let response = ipc::request(&data_dir, ipc::IpcCommand::Ping).await?;
+                print_json(&response)?;
+            }
+            DaemonCommand::Shutdown => {
+                let response = ipc::request(&data_dir, ipc::IpcCommand::Shutdown).await?;
+                print_json(&response)?;
+            }
+        },\n        Command::Run => {
             let marker = data_dir.join("STOP_ALL");
             if marker.exists() {
                 fs::remove_file(&marker)?;
