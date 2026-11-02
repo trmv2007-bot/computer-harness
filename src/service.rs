@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde_json::{json, Value};
 use std::path::Path;
 #[cfg(target_os = "linux")]
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
 #[cfg(any(windows, target_os = "linux"))]
 use tokio::process::Command;
 
@@ -11,78 +11,80 @@ const WINDOWS_TASK: &str = "ComputerHarnessFairy";
 #[cfg(target_os = "linux")]
 const LINUX_UNIT: &str = "fairy.service";
 
-pub async fn install(_data_dir: &Path) -> Result<String> {
-    #[cfg(any(windows, target_os = "linux"))]
+/// Install an opt-in, per-user startup entry. No installation happens implicitly.
+pub async fn install(data_dir: &Path) -> Result<String> {
+    #[cfg(windows)]
     {
         let executable = std::env::current_exe()
             .context("locate the Fairy executable")?
             .canonicalize()
             .context("resolve the Fairy executable path")?;
+        let task_command = format!("\"{}\" serve", executable.display());
+        let status = Command::new("schtasks")
+            .args([
+                "/Create",
+                "/TN",
+                WINDOWS_TASK,
+                "/SC",
+                "ONLOGON",
+                "/RL",
+                "LIMITED",
+                "/TR",
+            ])
+            .arg(task_command)
+            .arg("/F")
+            .status()
+            .await
+            .context("start Windows Task Scheduler command")?;
+        anyhow::ensure!(
+            status.success(),
+            "could not register Fairy at user logon: {status}"
+        );
+        Ok(format!("Installed user logon task '{WINDOWS_TASK}'."))
+    }
 
-        #[cfg(windows)]
-        {
-            let task_command = format!("\"{}\" serve", executable.display());
-            let status = Command::new("schtasks")
-                .args([
-                    "/Create",
-                    "/TN",
-                    WINDOWS_TASK,
-                    "/SC",
-                    "ONLOGON",
-                    "/RL",
-                    "LIMITED",
-                    "/TR",
-                ])
-                .arg(task_command)
-                .arg("/F")
-                .status()
-                .await
-                .context("start Windows Task Scheduler command")?;
-            anyhow::ensure!(
-                status.success(),
-                "could not register Fairy at user logon: {status}"
-            );
-            return Ok(format!("Installed user logon task '{WINDOWS_TASK}'."));
+    #[cfg(target_os = "linux")]
+    {
+        let executable = std::env::current_exe()
+            .context("locate the Fairy executable")?
+            .canonicalize()
+            .context("resolve the Fairy executable path")?;
+        let unit_path = linux_unit_path()?;
+        let parent = unit_path
+            .parent()
+            .context("resolve systemd user unit directory")?;
+        std::fs::create_dir_all(parent)?;
+        let contents = linux_unit_contents(&executable)?;
+        let temporary = unit_path.with_extension("service.tmp");
+        std::fs::write(&temporary, contents).context("write temporary systemd user unit")?;
+        std::fs::rename(&temporary, &unit_path).context("publish systemd user unit")?;
+        systemctl(&["daemon-reload"]).await?;
+        if let Err(error) = systemctl(&["enable", "--now", LINUX_UNIT]).await {
+            let _ = std::fs::remove_file(&unit_path);
+            let _ = systemctl(&["daemon-reload"]).await;
+            return Err(error).context("enable Fairy's systemd user service");
         }
-
-        #[cfg(target_os = "linux")]
-        {
-            let unit_path = linux_unit_path()?;
-            let parent = unit_path
-                .parent()
-                .context("resolve systemd user unit directory")?;
-            fs::create_dir_all(parent)?;
-            let contents = linux_unit_contents(&executable)?;
-            let temporary = unit_path.with_extension("service.tmp");
-            fs::write(&temporary, contents).context("write temporary systemd user unit")?;
-            fs::rename(&temporary, &unit_path).context("publish systemd user unit")?;
-            systemctl(&["daemon-reload"]).await?;
-            if let Err(error) = systemctl(&["enable", "--now", LINUX_UNIT]).await {
-                let _ = fs::remove_file(&unit_path);
-                let _ = systemctl(&["daemon-reload"]).await;
-                return Err(error).context("enable Fairy's systemd user service");
-            }
-            return Ok(format!(
-                "Installed and enabled '{LINUX_UNIT}' at {}",
-                unit_path.display()
-            ));
-        }
+        Ok(format!(
+            "Installed and enabled '{LINUX_UNIT}' at {}",
+            unit_path.display()
+        ))
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        let _ = _data_dir;
+        let _ = data_dir;
         anyhow::bail!(
             "automatic service installation is currently supported on Windows and Linux only"
-        );
+        )
     }
 }
 
-pub async fn uninstall(_data_dir: &Path) -> Result<String> {
+/// Remove startup registration while preserving Fairy's database and configuration.
+pub async fn uninstall(data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
-        if crate::ipc::is_running(_data_dir).await {
-            crate::ipc::request(_data_dir, crate::ipc::IpcCommand::Shutdown).await?;
+        if crate::ipc::is_running(data_dir).await {
+            crate::ipc::request(data_dir, crate::ipc::IpcCommand::Shutdown).await?;
         }
         let status = Command::new("schtasks")
             .args(["/Delete", "/TN", WINDOWS_TASK, "/F"])
@@ -93,7 +95,7 @@ pub async fn uninstall(_data_dir: &Path) -> Result<String> {
             status.success(),
             "could not remove Fairy's scheduled task: {status}"
         );
-        return Ok(format!("Removed user logon task '{WINDOWS_TASK}'."));
+        Ok(format!("Removed user logon task '{WINDOWS_TASK}'."))
     }
 
     #[cfg(target_os = "linux")]
@@ -101,23 +103,24 @@ pub async fn uninstall(_data_dir: &Path) -> Result<String> {
         let unit_path = linux_unit_path()?;
         if unit_path.exists() {
             systemctl(&["disable", "--now", LINUX_UNIT]).await?;
-            fs::remove_file(&unit_path).context("remove systemd user unit")?;
+            std::fs::remove_file(&unit_path).context("remove systemd user unit")?;
             systemctl(&["daemon-reload"]).await?;
-            return Ok(format!(
+            Ok(format!(
                 "Removed '{LINUX_UNIT}'. Existing task data was preserved."
-            ));
+            ))
+        } else {
+            Ok(format!(
+                "'{LINUX_UNIT}' is not installed; task data was preserved."
+            ))
         }
-        return Ok(format!(
-            "'{LINUX_UNIT}' is not installed; task data was preserved."
-        ));
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        let _ = _data_dir;
+        let _ = data_dir;
         anyhow::bail!(
             "automatic service management is currently supported on Windows and Linux only"
-        );
+        )
     }
 }
 
@@ -133,13 +136,13 @@ pub async fn start(_data_dir: &Path) -> Result<String> {
             status.success(),
             "could not start Fairy's scheduled task: {status}"
         );
-        return Ok("Fairy start requested through Windows Task Scheduler.".to_owned());
+        Ok("Fairy start requested through Windows Task Scheduler.".to_owned())
     }
 
     #[cfg(target_os = "linux")]
     {
         systemctl(&["start", LINUX_UNIT]).await?;
-        return Ok("Fairy start requested through systemd.".to_owned());
+        Ok("Fairy start requested through systemd.".to_owned())
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -147,7 +150,7 @@ pub async fn start(_data_dir: &Path) -> Result<String> {
         let _ = _data_dir;
         anyhow::bail!(
             "automatic service management is currently supported on Windows and Linux only"
-        );
+        )
     }
 }
 
@@ -156,16 +159,17 @@ pub async fn stop(data_dir: &Path) -> Result<String> {
     {
         if crate::ipc::is_running(data_dir).await {
             crate::ipc::request(data_dir, crate::ipc::IpcCommand::Shutdown).await?;
-            return Ok("Fairy shutdown requested through authenticated local IPC.".to_owned());
+            Ok("Fairy shutdown requested through authenticated local IPC.".to_owned())
+        } else {
+            Ok("Fairy is not currently running.".to_owned())
         }
-        return Ok("Fairy is not currently running.".to_owned());
     }
 
     #[cfg(target_os = "linux")]
     {
         let _ = data_dir;
         systemctl(&["stop", LINUX_UNIT]).await?;
-        return Ok("Fairy stop requested through systemd.".to_owned());
+        Ok("Fairy stop requested through systemd.".to_owned())
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
@@ -173,7 +177,7 @@ pub async fn stop(data_dir: &Path) -> Result<String> {
         let _ = data_dir;
         anyhow::bail!(
             "automatic service management is currently supported on Windows and Linux only"
-        );
+        )
     }
 }
 
@@ -187,12 +191,12 @@ pub async fn status(data_dir: &Path) -> Result<Value> {
             .output()
             .await
             .context("query Windows Task Scheduler")?;
-        return Ok(json!({
+        Ok(json!({
             "manager": "windows_task_scheduler",
             "installed": output.status.success(),
             "running": running,
             "details": String::from_utf8_lossy(&output.stdout).trim()
-        }));
+        }))
     }
 
     #[cfg(target_os = "linux")]
@@ -208,13 +212,13 @@ pub async fn status(data_dir: &Path) -> Result<Value> {
         } else {
             String::from_utf8_lossy(&output.stdout).trim().to_owned()
         };
-        return Ok(json!({
+        Ok(json!({
             "manager": "systemd_user",
             "installed": unit_path.is_file(),
             "running": running,
             "manager_state": manager_state,
             "unit_path": unit_path
-        }));
+        }))
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
