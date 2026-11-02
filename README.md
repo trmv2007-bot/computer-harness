@@ -1,30 +1,24 @@
 # Computer Harness
 
-**Implementation status: Milestone 1 scaffolding in progress.**
+**Implementation status: early core prototype — not release-ready.**
 
-Computer Harness is a persistent, federated, cross-platform computer-agent runtime with **Fairy** as its adaptive companion and coordinator. The product is CLI-first; a dashboard is deferred until the CLI/runtime is dependable.
+Computer Harness is a persistent, federated, cross-platform computer-agent runtime with **Fairy** as its adaptive companion and coordinator. The product is CLI-first; a dashboard is deferred until the runtime is dependable.
 
-## Current source slice
+## Implemented in this branch
 
-The `build/foundation-m1` branch currently contains:
-- Native Rust CLI entry point (`fairy doctor`, `fairy status`, `fairy run`).
-- Per-user application data/config directory initialization.
-- Machine-readable JSON status and diagnostics that explicitly avoid claiming authentication or platform-control support.
-- Foreground supervisor shell with clean Ctrl+C handling.
-- Windows/Linux GitHub Actions checks for formatting, Clippy, tests and release build.
-- An implementation status ledger that records what is and is not implemented.
+- Rust CLI commands: `fairy doctor`, `fairy status`, `fairy run`.
+- Per-user data/config directory initialization.
+- SQLite database with WAL mode, schema version marker, durable task records and event log.
+- Task commands: `fairy task create <title> <objective>`, `fairy task list`, `fairy task show <id>`, `fairy task cancel <id>`.
+- Local stop-request marker via `fairy stop-all` (does not yet terminate workers).
+- Windows/Linux CI workflow for formatting, Clippy, tests and release build.
+- Explicit architecture contracts and an implementation status ledger.
 
-This is scaffolding, not the completed persistent daemon or Fairy agent.
+The task store persists objectives; it does **not** yet execute them. The `run` command remains a foreground supervisor shell, not an installed background service.
 
-## Planning and tracking
+## Build
 
-- [Planning specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md)
-- [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md)
-- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
-
-## Build from source
-
-Install stable Rust with Cargo, then run:
+Install stable Rust and Cargo:
 
 ```sh
 cargo fmt --all -- --check
@@ -33,14 +27,25 @@ cargo test --all-targets
 cargo build --release
 ```
 
-Run:
+## Try the current CLI
 
 ```sh
 cargo run -- doctor
 cargo run -- status
+cargo run -- task create "Example" "Describe the objective"
+cargo run -- task list
 cargo run -- run
 ```
 
-## Non-claims
+## Planning and evidence
 
-The current source does not yet provide a persistent background daemon, task store, Qoder integration, model routing, permission gateway, tool registry, browser/GUI/computer control, memory, skills, federation, Android support, Gaming Mode or self-improvement. These remain required roadmap work. Hosted CI and owner-device tests must pass before the first slice is accepted.
+- [Planning specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md)
+- [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md)
+- [Architecture contracts](docs/ARCHITECTURE_CONTRACTS.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+
+## Not implemented
+
+No background daemon/service or IPC; task scheduler/worker execution; provider/model routing; Qoder integration; permission/approval gateway; tool registry/execution; browser/GUI/computer control; durable memory/skills; secure device pairing/federation; Linux or Android platform adapters; vision/research pipeline; Gaming Mode/resource governor; notifications; self-improvement; dashboard; installer/updater. These are required project scope, not optional claims.
+
+No hosted model is assumed to provide unlimited zero-cost inference. Paid fallback is prohibited unless explicitly authorized. Windows/Linux CI and owner-device tests must pass before this prototype is accepted.
