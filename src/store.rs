@@ -7,6 +7,22 @@ use std::{
 };
 
 #[derive(Debug, Clone, Serialize)]
+pub struct CapabilityGrant {
+    pub capability: String,
+    pub note: String,
+    pub granted_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Approval {
+    pub id: String,
+    pub action: String,
+    pub reason: String,
+    pub state: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Task {
     pub id: String,
     pub title: String,
@@ -29,7 +45,8 @@ impl Store {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS schema_meta (
+            "BEGIN IMMEDIATE;
+             CREATE TABLE IF NOT EXISTS schema_meta (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
              );
@@ -57,7 +74,20 @@ impl Store {
                 state TEXT NOT NULL CHECK(state IN ('pending','approved','denied')),
                 created_at INTEGER NOT NULL
              );
-             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','1');",
+             CREATE TABLE IF NOT EXISTS capability_grants (
+                capability TEXT PRIMARY KEY,
+                note TEXT NOT NULL,
+                granted_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS approval_uses (
+                approval_id TEXT PRIMARY KEY,
+                consumed_at INTEGER NOT NULL,
+                FOREIGN KEY(approval_id) REFERENCES approvals(id)
+             );
+             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','2');
+             UPDATE schema_meta SET value='2'
+                WHERE key='schema_version' AND CAST(value AS INTEGER)<2;
+             COMMIT;",
         )
         .context("initialize database schema")?;
         Ok(Self { conn })
@@ -177,11 +207,182 @@ impl Store {
         Ok(())
     }
 
+    pub fn grant_capability(&self, capability: &str, note: &str) -> Result<CapabilityGrant> {
+        let capability = validate_key(capability, "capability")?;
+        let note = note.trim();
+        anyhow::ensure!(!note.is_empty(), "grant note cannot be empty");
+        anyhow::ensure!(note.len() <= 1000, "grant note must be 1000 bytes or fewer");
+        let granted_at = now();
+        self.conn.execute(
+            "INSERT INTO capability_grants(capability,note,granted_at) VALUES(?1,?2,?3)
+             ON CONFLICT(capability) DO UPDATE SET note=excluded.note, granted_at=excluded.granted_at",
+            params![capability, note, granted_at],
+        )?;
+        self.record_system_event(
+            "capability.granted",
+            &serde_json::json!({"capability":capability,"note":note}).to_string(),
+        )?;
+        Ok(CapabilityGrant {
+            capability,
+            note: note.to_owned(),
+            granted_at,
+        })
+    }
+
+    pub fn revoke_capability(&self, capability: &str) -> Result<bool> {
+        let capability = validate_key(capability, "capability")?;
+        let changed = self.conn.execute(
+            "DELETE FROM capability_grants WHERE capability=?1",
+            [capability.as_str()],
+        )?;
+        if changed > 0 {
+            self.record_system_event(
+                "capability.revoked",
+                &serde_json::json!({"capability":capability}).to_string(),
+            )?;
+        }
+        Ok(changed > 0)
+    }
+
+    pub fn has_capability(&self, capability: &str) -> Result<bool> {
+        let capability = validate_key(capability, "capability")?;
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM capability_grants WHERE capability=?1)",
+            [capability],
+            |row| row.get(0),
+        )?)
+    }
+
+    pub fn list_capabilities(&self) -> Result<Vec<CapabilityGrant>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT capability,note,granted_at FROM capability_grants ORDER BY capability",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(CapabilityGrant {
+                capability: row.get(0)?,
+                note: row.get(1)?,
+                granted_at: row.get(2)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .context("read capability grants")
+    }
+
+    pub fn create_approval(&self, action: &str, reason: &str) -> Result<Approval> {
+        let action = validate_key(action, "approval action")?;
+        let reason = reason.trim();
+        anyhow::ensure!(!reason.is_empty(), "approval reason cannot be empty");
+        anyhow::ensure!(reason.len() <= 2000, "approval reason must be 2000 bytes or fewer");
+        let approval = Approval {
+            id: uuid::Uuid::new_v4().to_string(),
+            action,
+            reason: reason.to_owned(),
+            state: "pending".to_owned(),
+            created_at: now(),
+        };
+        self.conn.execute(
+            "INSERT INTO approvals(id,action,reason,state,created_at) VALUES(?1,?2,?3,'pending',?4)",
+            params![approval.id, approval.action, approval.reason, approval.created_at],
+        )?;
+        self.record_system_event(
+            "approval.requested",
+            &serde_json::to_string(&approval)?,
+        )?;
+        Ok(approval)
+    }
+
+    pub fn resolve_approval(&self, id: &str, approved: bool) -> Result<bool> {
+        let next = if approved { "approved" } else { "denied" };
+        let changed = self.conn.execute(
+            "UPDATE approvals SET state=?2 WHERE id=?1 AND state='pending'",
+            params![id, next],
+        )?;
+        if changed > 0 {
+            self.record_system_event(
+                "approval.resolved",
+                &serde_json::json!({"id":id,"state":next}).to_string(),
+            )?;
+        }
+        Ok(changed > 0)
+    }
+
+    pub fn list_approvals(&self) -> Result<Vec<Approval>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id,action,reason,state,created_at FROM approvals ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Approval {
+                id: row.get(0)?,
+                action: row.get(1)?,
+                reason: row.get(2)?,
+                state: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .context("read approval requests")
+    }
+
+    pub fn approval_is_approved(&self, id: &str, action: &str) -> Result<bool> {
+        let action = validate_key(action, "approval action")?;
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM approvals a
+                WHERE a.id=?1 AND a.action=?2 AND a.state='approved'
+                  AND NOT EXISTS(
+                    SELECT 1 FROM approval_uses u WHERE u.approval_id=a.id
+                  )
+             )",
+            params![id, action],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// Atomically consume an approved, action-scoped approval exactly once.
+    pub fn consume_approval(&self, id: &str, action: &str) -> Result<bool> {
+        let action = validate_key(action, "approval action")?;
+        let changed = self.conn.execute(
+            "INSERT INTO approval_uses(approval_id,consumed_at)
+             SELECT id,?3 FROM approvals
+             WHERE id=?1 AND action=?2 AND state='approved'
+             ON CONFLICT(approval_id) DO NOTHING",
+            params![id, action, now()],
+        )?;
+        if changed > 0 {
+            self.record_system_event(
+                "approval.consumed",
+                &serde_json::json!({"id":id,"action":action}).to_string(),
+            )?;
+        }
+        Ok(changed == 1)
+    }
+
+    fn record_system_event(&self, kind: &str, payload: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO events(task_id,event_type,payload,created_at) VALUES(NULL,?1,?2,?3)",
+            params![kind, payload, now()],
+        )?;
+        Ok(())
+    }
+
     pub fn event_count(&self) -> Result<i64> {
         Ok(self
             .conn
             .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?)
     }
+}
+
+fn validate_key(value: &str, label: &str) -> Result<String> {
+    let value = value.trim();
+    anyhow::ensure!(!value.is_empty(), "{label} cannot be empty");
+    anyhow::ensure!(value.len() <= 128, "{label} must be 128 bytes or fewer");
+    anyhow::ensure!(
+        value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || "._:-".contains(ch)),
+        "{label} may contain only ASCII letters, numbers, dot, underscore, colon and hyphen"
+    );
+    Ok(value.to_owned())
 }
 
 fn now() -> i64 {
@@ -228,6 +429,44 @@ mod tests {
         assert_eq!(completed.state, "completed");
         assert!(store.transition_task(&task.id, "queued").is_err());
         assert_eq!(store.event_count().unwrap(), 3);
+    }
+
+
+    #[test]
+    fn grants_are_explicit_reversible_and_audited() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        assert!(!store.has_capability("filesystem.read").unwrap());
+        store
+            .grant_capability("filesystem.read", "Owner approved read access")
+            .unwrap();
+        assert!(store.has_capability("filesystem.read").unwrap());
+        assert_eq!(store.list_capabilities().unwrap().len(), 1);
+        assert!(store.revoke_capability("filesystem.read").unwrap());
+        assert!(!store.has_capability("filesystem.read").unwrap());
+        assert_eq!(store.event_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn approvals_are_action_scoped_and_consumed_once() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let approval = store
+            .create_approval("filesystem.delete", "Delete generated build output")
+            .unwrap();
+        assert!(!store.approval_is_approved(&approval.id, "filesystem.delete").unwrap());
+        assert!(store.resolve_approval(&approval.id, true).unwrap());
+        assert!(!store.resolve_approval(&approval.id, false).unwrap());
+        assert!(!store.approval_is_approved(&approval.id, "process.kill").unwrap());
+        assert!(store.approval_is_approved(&approval.id, "filesystem.delete").unwrap());
+        assert!(store.consume_approval(&approval.id, "filesystem.delete").unwrap());
+        assert!(!store.consume_approval(&approval.id, "filesystem.delete").unwrap());
+        assert!(!store.approval_is_approved(&approval.id, "filesystem.delete").unwrap());
+    }
+
+    #[test]
+    fn rejects_wildcard_and_invalid_capability_names() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        assert!(store.grant_capability("*", "too broad").is_err());
+        assert!(store.grant_capability("shell;admin", "invalid syntax").is_err());
     }
 
     #[test]
