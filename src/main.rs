@@ -159,11 +159,8 @@ async fn main() -> Result<()> {
                 }
                 TaskCommand::Show { id } => {
                     if daemon_online {
-                        let response = ipc::request(
-                            &data_dir,
-                            ipc::IpcCommand::GetTask { id },
-                        )
-                        .await?;
+                        let response =
+                            ipc::request(&data_dir, ipc::IpcCommand::GetTask { id }).await?;
                         print_json(&response.data)?;
                     } else {
                         match store.get_task(&id)? {
@@ -174,11 +171,8 @@ async fn main() -> Result<()> {
                 }
                 TaskCommand::Cancel { id } => {
                     if daemon_online {
-                        let response = ipc::request(
-                            &data_dir,
-                            ipc::IpcCommand::CancelTask { id },
-                        )
-                        .await?;
+                        let response =
+                            ipc::request(&data_dir, ipc::IpcCommand::CancelTask { id }).await?;
                         print_json(&response.data)?;
                     } else if store.cancel_task(&id)? {
                         println!("cancelled {id}");
@@ -188,18 +182,16 @@ async fn main() -> Result<()> {
                 }
                 TaskCommand::SetState { id, state } => {
                     if daemon_online {
-                        let response = ipc::request(
-                            &data_dir,
-                            ipc::IpcCommand::SetTaskState { id, state },
-                        )
-                        .await?;
+                        let response =
+                            ipc::request(&data_dir, ipc::IpcCommand::SetTaskState { id, state })
+                                .await?;
                         print_json(&response.data)?;
                     } else {
                         print_json(&store.transition_task(&id, &state)?)?;
                     }
                 }
             }
-        },
+        }
         Command::StopAll => {
             let marker = data_dir.join("STOP_ALL");
             fs::write(&marker, b"stop requested\n")?;
