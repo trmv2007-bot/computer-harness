@@ -180,7 +180,13 @@ enum TaskCommand {
     List,
     /// Show a task by its identifier.
     Show { id: String },
-    /// Cancel a queued/running/paused task.
+    /// Run a user-triggered, read-only Qoder inspection for a queued task.
+    Inspect { id: String },
+    /// Show the most recent persisted agent attempt for a task.
+    Result { id: String },
+    /// Accept a successful inspected result after owner review.
+    Accept { id: String },
+    /// Cancel a queued or paused task. Running attempts are not killed by this command.
     Cancel { id: String },
     /// Move a task through a validated lifecycle transition.
     SetState { id: String, state: String },
@@ -198,6 +204,12 @@ struct Status {
     model_provider: &'static str,
     computer_control: &'static str,
 }
+
+struct AgentOutcome {
+    result: String,
+    usage: Option<serde_json::Value>,
+}
+
 
 fn paths() -> Result<(PathBuf, PathBuf)> {
     let dirs = ProjectDirs::from("dev", "ComputerHarness", "Fairy")
@@ -243,7 +255,12 @@ async fn agent_setup(agent_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn agent_ask(agent_dir: &Path, data_dir: &Path, store: &Store, prompt: &str) -> Result<()> {
+async fn agent_ask(
+    agent_dir: &Path,
+    data_dir: &Path,
+    store: &Store,
+    prompt: &str,
+) -> Result<AgentOutcome> {
     anyhow::ensure!(
         prompt.len() <= 32 * 1024,
         "prompt exceeds the 32 KiB Qoder worker limit"
@@ -304,6 +321,9 @@ async fn agent_ask(agent_dir: &Path, data_dir: &Path, store: &Store, prompt: &st
         .take()
         .context("open Qoder worker output stream")?;
     let mut lines = BufReader::new(stdout).lines();
+    let mut final_result: Option<String> = None;
+    let mut final_error: Option<String> = None;
+    let mut usage: Option<serde_json::Value> = None;
     while let Some(line) = lines.next_line().await? {
         let event: serde_json::Value =
             serde_json::from_str(&line).context("Qoder worker emitted invalid JSON")?;
@@ -319,26 +339,51 @@ async fn agent_ask(agent_dir: &Path, data_dir: &Path, store: &Store, prompt: &st
                 );
             }
             "result" => {
-                eprintln!(
-                    "\n[Qoder result] {}",
-                    event["subtype"].as_str().unwrap_or("unknown")
-                );
+                let subtype = event["subtype"].as_str().unwrap_or("unknown");
+                let is_error = event["isError"].as_bool().unwrap_or(true);
+                eprintln!("\n[Qoder result] {subtype} (is_error={is_error})");
+                if subtype == "success" && !is_error {
+                    final_result = event["result"].as_str().map(str::to_owned);
+                } else {
+                    final_error = event["errors"]
+                        .as_array()
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(serde_json::Value::as_str)
+                                .collect::<Vec<_>>()
+                                .join("; ")
+                        })
+                        .filter(|value| !value.is_empty())
+                        .or_else(|| event["result"].as_str().map(str::to_owned))
+                        .or_else(|| Some(format!("Qoder result ended with subtype '{subtype}'")));
+                }
             }
-            "usage" => eprintln!("[Qoder usage] {}", event),
-            "error" => eprintln!(
-                "[Qoder error] {}",
-                event["message"].as_str().unwrap_or("unknown error")
-            ),
+            "usage" => {
+                usage = Some(event.clone());
+                eprintln!("[Qoder usage] {}", event);
+            }
+            "error" => {
+                let message = event["message"].as_str().unwrap_or("unknown error").to_owned();
+                eprintln!("[Qoder error] {message}");
+                final_error = Some(message);
+            }
             _ => {}
         }
     }
 
     let status = child.wait().await.context("wait for Qoder worker")?;
-    anyhow::ensure!(
-        status.success(),
-        "Qoder Agent worker exited unsuccessfully: {status}"
-    );
-    Ok(())
+    if !status.success() {
+        anyhow::bail!(
+            "Qoder Agent worker exited unsuccessfully ({status}): {}",
+            final_error.as_deref().unwrap_or("no error detail was provided")
+        );
+    }
+    if let Some(error) = final_error {
+        anyhow::bail!("Qoder Agent request failed: {error}");
+    }
+    let result = final_result.context("Qoder worker exited without a successful result")?;
+    Ok(AgentOutcome { result, usage })
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -425,6 +470,57 @@ async fn main() -> Result<()> {
                     } else {
                         anyhow::bail!("task not found or no longer cancellable: {id}");
                     }
+                }
+                TaskCommand::Inspect { id } => {
+                    let task = store
+                        .get_task(&id)?
+                        .with_context(|| format!("task not found: {id}"))?;
+                    let prompt = format!(
+                        "Inspect this queued task using only the provided read-only Fairy workspace tools.\n\nTitle: {}\nObjective: {}\n\nConstraints:\n- Do not modify, create, delete, or rename files.\n- Do not run shell commands or other processes.\n- Use only the provided workspace listing and text-reading tools.\n- Never read credential or secret files.\n- Distinguish verified observations from assumptions.\n- If the objective requires writing code or changing the computer, explain that this read-only pass cannot perform it and provide a concrete next-step plan.\n- Do not claim the objective is complete merely because this inspection finished.",
+                        task.title, task.objective
+                    );
+                    let run = store.start_task_run(&id, &prompt)?;
+                    match agent_ask(&agent_dir, &data_dir, &store, &prompt).await {
+                        Ok(outcome) => {
+                            let finished = store.finish_task_run(
+                                &run.id,
+                                true,
+                                Some(&outcome.result),
+                                None,
+                                outcome.usage.as_ref(),
+                            )?;
+                            print_json(&finished)?;
+                            eprintln!("Task is paused for owner review; the agent result is not proof of task completion.");
+                        }
+                        Err(error) => {
+                            let detail = error.to_string();
+                            let _ = store.finish_task_run(
+                                &run.id,
+                                false,
+                                None,
+                                Some(&detail),
+                                None,
+                            );
+                            return Err(error);
+                        }
+                    }
+                }
+                TaskCommand::Result { id } => {
+                    let run = store
+                        .latest_task_run(&id)?
+                        .with_context(|| format!("no agent attempts recorded for task: {id}"))?;
+                    print_json(&run)?;
+                }
+                TaskCommand::Accept { id } => {
+                    let latest = store
+                        .latest_task_run(&id)?
+                        .with_context(|| format!("no agent attempts recorded for task: {id}"))?;
+                    anyhow::ensure!(
+                        latest.status == "succeeded",
+                        "the latest agent attempt did not succeed; inspect the result or retry first"
+                    );
+                    let accepted = store.transition_task(&id, "completed")?;
+                    print_json(&accepted)?;
                 }
                 TaskCommand::SetState { id, state } => {
                     if daemon_online {
@@ -534,7 +630,7 @@ async fn main() -> Result<()> {
             match action {
                 AgentCommand::Setup => agent_setup(&agent_dir).await?,
                 AgentCommand::Ask { prompt } => {
-                    agent_ask(&agent_dir, &data_dir, &store, &prompt).await?;
+                    let _outcome = agent_ask(&agent_dir, &data_dir, &store, &prompt).await?;
                 }
             }
         }
