@@ -4,7 +4,7 @@ This document is the execution companion to [the planning specification](./COMPU
 
 **Current status: PARTIAL — early core prototype; all release gates remain open.**
 
-Latest inspected CI evidence: run `41400537374` for commit `41535003f409c12bad2138825ce2a31712a64f7c` passed Node validation and all Ubuntu Rust stages; Windows passed fmt/Clippy and its tests/build were in progress at last inspection. Later commits still need a complete green run on current HEAD.
+Latest CI evidence must be refreshed against the current branch head after each implementation batch; older successful runs do not verify later commits.
 **Implementation authorization phrase:** `START THE BUILD`
 
 ## Rules for the eventual build
@@ -36,7 +36,7 @@ Latest inspected CI evidence: run `41400537374` for commit `41535003f409c12bad21
 
 ### Gate 1 — Persistent CLI core
 - [ ] CLI lifecycle and structured command output.
-- [ ] Persistent background runtime and reconnecting sessions (foreground loopback control-plane and CLI RPC client are implemented and CI-tested; OS-managed service installation/auto-start and reconnect/recovery behavior remain open).
+- [ ] Persistent background runtime and reconnecting sessions (foreground loopback control plane and CLI RPC are implemented; opt-in Windows Task Scheduler and Linux systemd user-service registration is implemented in code, but service lifecycle, crash/restart and reconnect recovery still need device validation).
 - [ ] Durable task/event store, checkpoints and recovery.
 - [ ] Diagnostics, logs, configuration and migrations.
 - [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness for the persistent core.
@@ -52,7 +52,7 @@ Latest inspected CI evidence: run `41400537374` for commit `41535003f409c12bad21
 
 ### Gate 3 — Tool and safety gateway
 - [ ] Typed tool registry and platform capability declarations (initial workspace list/read tools exist; OS adapters and broader tools remain open).
-- [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approval records, audit events and policy evaluator are implemented; no tool executor/gateway yet, and latest policy changes are awaiting CI).
+- [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approvals, a central policy evaluator, two read-only filesystem executors and audited tool RPC exist; write tools, stronger sandboxing and comprehensive secret redaction remain open).
 - [ ] Sandboxed execution and secret redaction (canonical workspace path checks exist but are not an OS sandbox; race hardening and comprehensive redaction remain open).
 - [ ] Cancellation, timeouts and side-effect classification.
 - [ ] Local emergency stop works offline.
