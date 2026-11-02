@@ -1,8 +1,12 @@
 use anyhow::{Context, Result};
+use cap_std::{
+    ambient_authority,
+    fs::{Dir, File},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    fs,
+    io::Read,
     path::{Component, Path, PathBuf},
 };
 use tracing::info;
@@ -147,18 +151,18 @@ pub fn execute(
     }
 }
 
-fn workspace_root(store: &Store) -> Result<PathBuf> {
+/// Open the configured workspace once and retain a directory capability.
+/// Subsequent lookups are relative to this handle and cannot escape via parent
+/// traversal or an external symlink.
+fn workspace_root(store: &Store) -> Result<Dir> {
     let value = store
         .get_setting("workspace_root")?
         .context("workspace is not configured; use 'fairy workspace set <directory>'")?;
-    let root = PathBuf::from(value)
-        .canonicalize()
-        .context("configured workspace is unavailable")?;
-    anyhow::ensure!(root.is_dir(), "configured workspace is not a directory");
-    Ok(root)
+    Dir::open_ambient_dir(Path::new(&value), ambient_authority())
+        .context("open configured workspace directory")
 }
 
-fn resolve_workspace_path(root: &Path, relative: &str) -> Result<PathBuf> {
+fn resolve_workspace_path(relative: &str) -> Result<PathBuf> {
     anyhow::ensure!(!relative.trim().is_empty(), "path cannot be empty");
     let relative = Path::new(relative);
     anyhow::ensure!(!relative.is_absolute(), "absolute paths are not allowed");
@@ -169,16 +173,7 @@ fn resolve_workspace_path(root: &Path, relative: &str) -> Result<PathBuf> {
             "path traversal and rooted path components are not allowed"
         );
     }
-
-    let resolved = root
-        .join(relative)
-        .canonicalize()
-        .context("workspace path does not exist or cannot be accessed")?;
-    anyhow::ensure!(
-        resolved.starts_with(root),
-        "resolved path escapes the configured workspace"
-    );
-    Ok(resolved)
+    Ok(relative.to_path_buf())
 }
 
 #[derive(Debug, Deserialize)]
@@ -192,35 +187,33 @@ fn current_directory() -> String {
     ".".to_owned()
 }
 
-fn list_directory(root: &Path, input_json: &str) -> Result<Value> {
+fn list_directory(root: &Dir, input_json: &str) -> Result<Value> {
     let input: ListInput = serde_json::from_str(input_json)
         .context("filesystem.list input must be a JSON object with an optional path")?;
-    let directory = resolve_workspace_path(root, &input.path)?;
-    anyhow::ensure!(
-        directory.is_dir(),
-        "requested workspace path is not a directory"
-    );
-
+    let relative = resolve_workspace_path(&input.path)?;
     let mut entries = Vec::new();
-    for entry in fs::read_dir(&directory).context("read workspace directory")? {
+    for entry in root
+        .read_dir(&relative)
+        .context("read workspace directory")?
+    {
         anyhow::ensure!(
             entries.len() < MAX_DIRECTORY_ENTRIES,
             "directory exceeds the 1000-entry listing limit"
         );
         let entry = entry?;
-        let metadata = entry
+        let file_type = entry
             .file_type()
             .context("inspect workspace directory entry")?;
-        let kind = if metadata.is_dir() {
+        let kind = if file_type.is_dir() {
             "directory"
-        } else if metadata.is_file() {
+        } else if file_type.is_file() {
             "file"
-        } else if metadata.is_symlink() {
+        } else if file_type.is_symlink() {
             "symlink"
         } else {
             "other"
         };
-        let size_bytes = if metadata.is_file() {
+        let size_bytes = if file_type.is_file() {
             Some(entry.metadata()?.len())
         } else {
             None
@@ -250,11 +243,14 @@ struct ReadInput {
     path: String,
 }
 
-fn read_text_file(root: &Path, input_json: &str) -> Result<Value> {
+fn read_text_file(root: &Dir, input_json: &str) -> Result<Value> {
     let input: ReadInput = serde_json::from_str(input_json)
         .context("filesystem.read_text requires a JSON path field")?;
-    let file = resolve_workspace_path(root, &input.path)?;
-    let metadata = fs::metadata(&file).context("inspect workspace file")?;
+    let relative = resolve_workspace_path(&input.path)?;
+    let file: File = root
+        .open(&relative)
+        .context("open workspace text file through its directory capability")?;
+    let metadata = file.metadata().context("inspect workspace file")?;
     anyhow::ensure!(
         metadata.is_file(),
         "requested workspace path is not a regular file"
@@ -263,8 +259,14 @@ fn read_text_file(root: &Path, input_json: &str) -> Result<Value> {
         metadata.len() <= MAX_TEXT_FILE_BYTES,
         "file exceeds the 1 MiB text-read limit"
     );
-    let text =
-        fs::read_to_string(&file).context("file is not valid UTF-8 text or cannot be read")?;
+    let mut text = String::new();
+    file.take(MAX_TEXT_FILE_BYTES + 1)
+        .read_to_string(&mut text)
+        .context("file is not valid UTF-8 text or cannot be read")?;
+    anyhow::ensure!(
+        text.len() as u64 <= MAX_TEXT_FILE_BYTES,
+        "file exceeded the 1 MiB text-read limit while being read"
+    );
     Ok(json!({
         "path": input.path,
         "size_bytes": metadata.len(),
@@ -275,6 +277,7 @@ fn read_text_file(root: &Path, input_json: &str) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn configured_store(root: &Path, grant: bool) -> Store {
         let store = Store::open(Path::new(":memory:")).unwrap();
