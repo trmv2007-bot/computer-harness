@@ -270,7 +270,9 @@ async fn main() -> Result<()> {
         }
         Command::Workspace { action } => match action {
             WorkspaceCommand::Set { path } => {
-                let canonical = path.canonicalize().context("workspace directory does not exist")?;
+                let canonical = path
+                    .canonicalize()
+                    .context("workspace directory does not exist")?;
                 anyhow::ensure!(canonical.is_dir(), "workspace path must be a directory");
                 let value = canonical.to_string_lossy().to_string();
                 store.set_setting("workspace_root", &value)?;
@@ -287,7 +289,11 @@ async fn main() -> Result<()> {
         },
         Command::Tool { action } => match action {
             ToolCommand::List => print_json(&tools::list_tools())?,
-            ToolCommand::Call { name, input_json, approval_id } => {
+            ToolCommand::Call {
+                name,
+                input_json,
+                approval_id,
+            } => {
                 let result = tools::execute(&store, &name, &input_json, approval_id.as_deref())?;
                 print_json(&result)?;
             }
