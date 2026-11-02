@@ -113,11 +113,13 @@ impl Store {
             created_at: now,
             updated_at: now,
         };
-        self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
             "INSERT INTO tasks(id,title,objective,state,created_at,updated_at) VALUES(?1,?2,?3,'queued',?4,?4)",
             params![task.id, task.title, task.objective, now],
         )?;
-        self.record_event(&task.id, "task.created", &serde_json::to_string(&task)?)?;
+        record_task_event_on(&tx, &task.id, "task.created", &serde_json::to_string(&task)?)?;
+        tx.commit()?;
         Ok(task)
     }
 
@@ -178,38 +180,38 @@ impl Store {
             next
         );
         let updated_at = now();
-        let changed = self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute(
             "UPDATE tasks SET state=?2, updated_at=?3 WHERE id=?1 AND state=?4",
             params![id, next, updated_at, current.state],
         )?;
         anyhow::ensure!(changed == 1, "task changed concurrently; reload and retry");
-        self.record_event(
+        record_task_event_on(
+            &tx,
             id,
             "task.state_changed",
             &serde_json::json!({"from": current.state, "to": next}).to_string(),
         )?;
+        tx.commit()?;
         self.get_task(id)?
             .ok_or_else(|| anyhow::anyhow!("task disappeared after state update"))
     }
 
     pub fn cancel_task(&self, id: &str) -> Result<bool> {
-        let now = now();
-        let changed = self.conn.execute(
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute(
             "UPDATE tasks SET state='cancelled',updated_at=?2 WHERE id=?1 AND state IN ('queued','running','paused')",
-            params![id, now],
+            params![id, now()],
         )?;
         if changed > 0 {
-            self.record_event(id, "task.cancelled", "{}")?;
+            record_task_event_on(&tx, id, "task.cancelled", "{}")?;
         }
+        tx.commit()?;
         Ok(changed > 0)
     }
 
     pub fn record_event(&self, task_id: &str, kind: &str, payload: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO events(task_id,event_type,payload,created_at) VALUES(?1,?2,?3,?4)",
-            params![task_id, kind, payload, now()],
-        )?;
-        Ok(())
+        record_task_event_on(&self.conn, task_id, kind, payload)
     }
 
     pub fn grant_capability(&self, capability: &str, note: &str) -> Result<CapabilityGrant> {
@@ -452,6 +454,14 @@ impl Store {
     }
 }
 
+fn record_task_event_on(conn: &Connection, task_id: &str, kind: &str, payload: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO events(task_id,event_type,payload,created_at) VALUES(?1,?2,?3,?4)",
+        params![task_id, kind, payload, now()],
+    )?;
+    Ok(())
+}
+
 fn record_system_event_on(conn: &Connection, kind: &str, payload: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO events(task_id,event_type,payload,created_at) VALUES(NULL,?1,?2,?3)",
@@ -503,6 +513,31 @@ mod tests {
         let reopened = Store::open(&path).unwrap();
         assert_eq!(reopened.get_task(&id).unwrap().unwrap().state, "cancelled");
         assert_eq!(reopened.event_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn task_mutations_roll_back_when_event_recording_fails() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        store.conn.execute_batch(
+            "CREATE TRIGGER reject_task_created
+             BEFORE INSERT ON events
+             WHEN NEW.event_type='task.created'
+             BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;"
+        ).unwrap();
+        assert!(store.create_task("Atomic create", "must roll back").is_err());
+        assert!(store.list_tasks().unwrap().is_empty());
+
+        store.conn.execute_batch("DROP TRIGGER reject_task_created;").unwrap();
+        let task = store.create_task("Atomic transition", "must remain queued").unwrap();
+        store.conn.execute_batch(
+            "CREATE TRIGGER reject_task_state
+             BEFORE INSERT ON events
+             WHEN NEW.event_type='task.state_changed'
+             BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;"
+        ).unwrap();
+        assert!(store.transition_task(&task.id, "running").is_err());
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "queued");
+        assert!(store.cancel_task(&task.id).is_ok());
     }
 
     #[test]
