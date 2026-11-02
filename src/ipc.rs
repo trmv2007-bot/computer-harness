@@ -60,8 +60,8 @@ pub async fn serve(data_dir: &Path, db_path: PathBuf) -> Result<()> {
     if !token_path.exists() {
         let token = uuid::Uuid::new_v4().simple().to_string();
         fs::write(&token_path, token.as_bytes()).context("write local IPC token")?;
-        restrict_token_permissions(&token_path)?;
     }
+    restrict_token_permissions(&token_path)?;
     let token = fs::read_to_string(&token_path)
         .context("read local IPC token")?
         .trim()
@@ -230,4 +230,59 @@ fn restrict_token_permissions(_path: &Path) -> Result<()> {
     // On Windows the file inherits the current user's profile-directory ACL.
     // A dedicated Windows ACL implementation is still required before release.
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn control_plane_serves_task_api_and_stops_cleanly() {
+        let directory = tempfile::tempdir().unwrap();
+        let data_dir = directory.path().to_path_buf();
+        let db_path = data_dir.join("fairy.sqlite3");
+        let server_dir = data_dir.clone();
+        let server = tokio::spawn(async move { serve(&server_dir, db_path).await });
+
+        let endpoint = data_dir.join(ENDPOINT_FILE);
+        for _ in 0..100 {
+            if endpoint.exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(endpoint.exists(), "control plane did not publish its endpoint");
+
+        let ping = request(&data_dir, IpcCommand::Ping).await.unwrap();
+        assert_eq!(ping.data["state"], "running");
+
+        let created = request(
+            &data_dir,
+            IpcCommand::CreateTask {
+                title: "IPC test".to_owned(),
+                objective: "Verify the local task API".to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+        let id = created.data["id"].as_str().unwrap().to_owned();
+
+        let fetched = request(&data_dir, IpcCommand::GetTask { id: id.clone() })
+            .await
+            .unwrap();
+        assert_eq!(fetched.data["state"], "queued");
+
+        let listed = request(&data_dir, IpcCommand::ListTasks).await.unwrap();
+        assert_eq!(listed.data.as_array().unwrap().len(), 1);
+
+        let cancelled = request(&data_dir, IpcCommand::CancelTask { id })
+            .await
+            .unwrap();
+        assert_eq!(cancelled.data["state"], "cancelled");
+
+        request(&data_dir, IpcCommand::Shutdown).await.unwrap();
+        server.await.unwrap().unwrap();
+        assert!(!endpoint.exists(), "control plane endpoint should be removed on shutdown");
+    }
 }
