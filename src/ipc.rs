@@ -108,6 +108,14 @@ pub async fn serve(data_dir: &Path, db_path: PathBuf) -> Result<()> {
         let _ = fs::remove_file(&endpoint_path);
     }
 
+    // Only recover after confirming that no healthy control plane owns this
+    // database. This prevents a second invocation from failing live attempts.
+    let recovery_store = Store::open(&db_path)?;
+    let recovered = recovery_store.recover_interrupted_runs()?;
+    if recovered > 0 {
+        info!(recovered, "recovered interrupted Fairy agent attempts");
+    }
+
     let listener = TcpListener::bind(("127.0.0.1", 0))
         .await
         .context("bind local loopback control plane")?;
