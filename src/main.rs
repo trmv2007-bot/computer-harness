@@ -3,7 +3,7 @@ mod policy;
 mod store;
 mod tools;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use serde::Serialize;
