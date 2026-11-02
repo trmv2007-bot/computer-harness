@@ -595,7 +595,8 @@ mod tests {
              BEFORE INSERT ON events
              WHEN NEW.event_type='approval.requested'
              BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
-        ).unwrap();
+            )
+            .unwrap();
         assert!(store
             .create_approval("filesystem.delete", "must be audited")
             .is_err());
