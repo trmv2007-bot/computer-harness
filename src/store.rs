@@ -118,7 +118,12 @@ impl Store {
             "INSERT INTO tasks(id,title,objective,state,created_at,updated_at) VALUES(?1,?2,?3,'queued',?4,?4)",
             params![task.id, task.title, task.objective, now],
         )?;
-        record_task_event_on(&tx, &task.id, "task.created", &serde_json::to_string(&task)?)?;
+        record_task_event_on(
+            &tx,
+            &task.id,
+            "task.created",
+            &serde_json::to_string(&task)?,
+        )?;
         tx.commit()?;
         Ok(task)
     }
@@ -518,26 +523,39 @@ mod tests {
     #[test]
     fn task_mutations_roll_back_when_event_recording_fails() {
         let store = Store::open(Path::new(":memory:")).unwrap();
-        store.conn.execute_batch(
-            "CREATE TRIGGER reject_task_created
-             BEFORE INSERT ON events
-             WHEN NEW.event_type='task.created'
-             BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;"
-        ).unwrap();
-        assert!(store.create_task("Atomic create", "must roll back").is_err());
+        store
+            .conn
+            .execute_batch(
+                "CREATE TRIGGER reject_task_created
+                 BEFORE INSERT ON events
+                 WHEN NEW.event_type='task.created'
+                 BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
+            )
+            .unwrap();
+        assert!(store
+            .create_task("Atomic create", "must roll back")
+            .is_err());
         assert!(store.list_tasks().unwrap().is_empty());
 
-        store.conn.execute_batch("DROP TRIGGER reject_task_created;").unwrap();
-        let task = store.create_task("Atomic transition", "must remain queued").unwrap();
-        store.conn.execute_batch(
-            "CREATE TRIGGER reject_task_state
-             BEFORE INSERT ON events
-             WHEN NEW.event_type='task.state_changed'
-             BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;"
-        ).unwrap();
+        store
+            .conn
+            .execute_batch("DROP TRIGGER reject_task_created;")
+            .unwrap();
+        let task = store
+            .create_task("Atomic transition", "must remain queued")
+            .unwrap();
+        store
+            .conn
+            .execute_batch(
+                "CREATE TRIGGER reject_task_mutations
+                 BEFORE INSERT ON events
+                 WHEN NEW.event_type IN ('task.state_changed', 'task.cancelled')
+                 BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
+            )
+            .unwrap();
         assert!(store.transition_task(&task.id, "running").is_err());
+        assert!(store.cancel_task(&task.id).is_err());
         assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "queued");
-        assert!(store.cancel_task(&task.id).is_ok());
     }
 
     #[test]
