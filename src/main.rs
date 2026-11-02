@@ -33,7 +33,9 @@ enum Command {
     Daemon {
         #[command(subcommand)]
         action: DaemonCommand,
-    },\n    /// Run the foreground supervisor shell.\n    Run,
+    },
+    /// Run the foreground supervisor shell.
+    Run,
     /// Manage durable objectives.
     Task {
         #[command(subcommand)]
@@ -216,7 +218,8 @@ async fn main() -> Result<()> {
                 let response = ipc::request(&data_dir, ipc::IpcCommand::Shutdown).await?;
                 print_json(&response)?;
             }
-        },\n        Command::Run => {
+        },
+        Command::Run => {
             let marker = data_dir.join("STOP_ALL");
             if marker.exists() {
                 fs::remove_file(&marker)?;
