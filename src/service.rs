@@ -23,20 +23,34 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
         {
             let task_command = format!("\"{}\" serve", executable.display());
             let status = Command::new("schtasks")
-                .args(["/Create", "/TN", WINDOWS_TASK, "/SC", "ONLOGON", "/RL", "LIMITED", "/TR"])
+                .args([
+                    "/Create",
+                    "/TN",
+                    WINDOWS_TASK,
+                    "/SC",
+                    "ONLOGON",
+                    "/RL",
+                    "LIMITED",
+                    "/TR",
+                ])
                 .arg(task_command)
                 .arg("/F")
                 .status()
                 .await
                 .context("start Windows Task Scheduler command")?;
-            anyhow::ensure!(status.success(), "could not register Fairy at user logon: {status}");
+            anyhow::ensure!(
+                status.success(),
+                "could not register Fairy at user logon: {status}"
+            );
             return Ok(format!("Installed user logon task '{WINDOWS_TASK}'."));
         }
 
         #[cfg(target_os = "linux")]
         {
             let unit_path = linux_unit_path()?;
-            let parent = unit_path.parent().context("resolve systemd user unit directory")?;
+            let parent = unit_path
+                .parent()
+                .context("resolve systemd user unit directory")?;
             fs::create_dir_all(parent)?;
             let contents = linux_unit_contents(&executable)?;
             let temporary = unit_path.with_extension("service.tmp");
@@ -48,14 +62,19 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
                 let _ = systemctl(&["daemon-reload"]).await;
                 return Err(error).context("enable Fairy's systemd user service");
             }
-            return Ok(format!("Installed and enabled '{LINUX_UNIT}' at {}", unit_path.display()));
+            return Ok(format!(
+                "Installed and enabled '{LINUX_UNIT}' at {}",
+                unit_path.display()
+            ));
         }
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = _data_dir;
-        anyhow::bail!("automatic service installation is currently supported on Windows and Linux only");
+        anyhow::bail!(
+            "automatic service installation is currently supported on Windows and Linux only"
+        );
     }
 }
 
@@ -70,7 +89,10 @@ pub async fn uninstall(_data_dir: &Path) -> Result<String> {
             .status()
             .await
             .context("start Windows Task Scheduler command")?;
-        anyhow::ensure!(status.success(), "could not remove Fairy's scheduled task: {status}");
+        anyhow::ensure!(
+            status.success(),
+            "could not remove Fairy's scheduled task: {status}"
+        );
         return Ok(format!("Removed user logon task '{WINDOWS_TASK}'."));
     }
 
@@ -81,15 +103,21 @@ pub async fn uninstall(_data_dir: &Path) -> Result<String> {
             systemctl(&["disable", "--now", LINUX_UNIT]).await?;
             fs::remove_file(&unit_path).context("remove systemd user unit")?;
             systemctl(&["daemon-reload"]).await?;
-            return Ok(format!("Removed '{LINUX_UNIT}'. Existing task data was preserved."));
+            return Ok(format!(
+                "Removed '{LINUX_UNIT}'. Existing task data was preserved."
+            ));
         }
-        return Ok(format!("'{LINUX_UNIT}' is not installed; task data was preserved."));
+        return Ok(format!(
+            "'{LINUX_UNIT}' is not installed; task data was preserved."
+        ));
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = _data_dir;
-        anyhow::bail!("automatic service management is currently supported on Windows and Linux only");
+        anyhow::bail!(
+            "automatic service management is currently supported on Windows and Linux only"
+        );
     }
 }
 
@@ -101,7 +129,10 @@ pub async fn start(_data_dir: &Path) -> Result<String> {
             .status()
             .await
             .context("start Windows Task Scheduler command")?;
-        anyhow::ensure!(status.success(), "could not start Fairy's scheduled task: {status}");
+        anyhow::ensure!(
+            status.success(),
+            "could not start Fairy's scheduled task: {status}"
+        );
         return Ok("Fairy start requested through Windows Task Scheduler.".to_owned());
     }
 
@@ -114,7 +145,9 @@ pub async fn start(_data_dir: &Path) -> Result<String> {
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = _data_dir;
-        anyhow::bail!("automatic service management is currently supported on Windows and Linux only");
+        anyhow::bail!(
+            "automatic service management is currently supported on Windows and Linux only"
+        );
     }
 }
 
@@ -138,7 +171,9 @@ pub async fn stop(data_dir: &Path) -> Result<String> {
     #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = data_dir;
-        anyhow::bail!("automatic service management is currently supported on Windows and Linux only");
+        anyhow::bail!(
+            "automatic service management is currently supported on Windows and Linux only"
+        );
     }
 }
 
@@ -200,7 +235,10 @@ fn linux_unit_path() -> Result<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| directories::BaseDirs::new().map(|dirs| dirs.config_dir().to_path_buf()))
         .context("could not determine the user config directory")?;
-    anyhow::ensure!(config_dir.is_absolute(), "XDG_CONFIG_HOME must be an absolute path");
+    anyhow::ensure!(
+        config_dir.is_absolute(),
+        "XDG_CONFIG_HOME must be an absolute path"
+    );
     Ok(config_dir.join("systemd").join("user").join(LINUX_UNIT))
 }
 
@@ -231,7 +269,11 @@ async fn systemctl(args: &[&str]) -> Result<()> {
         .status()
         .await
         .context("start systemctl --user")?;
-    anyhow::ensure!(status.success(), "systemctl --user {:?} failed: {status}", args);
+    anyhow::ensure!(
+        status.success(),
+        "systemctl --user {:?} failed: {status}",
+        args
+    );
     Ok(())
 }
 
