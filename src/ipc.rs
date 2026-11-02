@@ -19,6 +19,7 @@ use crate::store::Store;
 const TOKEN_FILE: &str = "ipc-token";
 const ENDPOINT_FILE: &str = "ipc-endpoint";
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
+const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
