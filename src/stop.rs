@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// Local, offline emergency-stop latch for Fairy-managed agent work.
 /// It intentionally does not stop unrelated processes or user applications.
@@ -10,7 +13,9 @@ pub struct StopLatch {
 
 impl StopLatch {
     pub fn new(data_dir: &Path) -> Self {
-        Self { marker: data_dir.join("STOP_ALL") }
+        Self {
+            marker: data_dir.join("STOP_ALL"),
+        }
     }
 
     pub fn is_stopped(&self) -> bool {
@@ -18,7 +23,10 @@ impl StopLatch {
     }
 
     pub fn activate(&self) -> Result<()> {
-        let parent = self.marker.parent().context("stop marker has no parent directory")?;
+        let parent = self
+            .marker
+            .parent()
+            .context("stop marker has no parent directory")?;
         fs::create_dir_all(parent)?;
         if !self.marker.exists() {
             let token = uuid::Uuid::new_v4().to_string();
@@ -55,7 +63,10 @@ mod tests {
 
         // Repeated activation does not silently reset or remove the stop request.
         latch.activate().unwrap();
-        assert_eq!(fs::read_to_string(directory.path().join("STOP_ALL")).unwrap(), marker);
+        assert_eq!(
+            fs::read_to_string(directory.path().join("STOP_ALL")).unwrap(),
+            marker
+        );
 
         assert!(latch.resume().unwrap());
         assert!(!latch.is_stopped());
