@@ -1,13 +1,13 @@
 # Fairy Runtime Integration — 0.3.0
 
-**Status:** Initial implementation slice integrated on `feat/fairy-runtime-0.3.0`; review required; not merged or deployed.  
+**Status:** Fairy 0.3.0 prototype artifact audited and mapped to requirements on `feat/fairy-runtime-0.3.0`; its source archive is not yet vendored in this Git repository. Review required; not merged or deployed.  
 **Authorization:** `START THE BUILD` received from the owner on 2026-11-02.  
-**Prototype artifact:** [Fairy Harness 0.3.0](../runtime/fairy/releases/fairy-harness-0.3.0.zip)  
+**Prototype artifact:** `fairy-harness-0.3.0.zip`, delivered separately in the ChatGPT conversation; no binary file is currently present in this repository.  
 **SHA-256:** `cc77a8756d99a77a4d071ebd0eb9c3eb777057bd7f4267ce26f83ac62b171896`
 
 ## 1. What was integrated
 
-The existing Fairy 0.3.0 source distribution is vendored as a versioned release artifact under `runtime/fairy/releases/`. It is kept separate from the Computer Harness planning document and does not replace the latter's shared-core architecture.
+The separate Fairy 0.3.0 source distribution was reviewed and mapped against the Computer Harness requirements. The repository currently contains this integration record only; the archive itself must still be uploaded through a binary-capable Git workflow before the code can be considered vendored. It does not replace the shared-core architecture in the planning specification.
 
 The archive contains:
 - Python CLI and persistent local daemon.
@@ -55,7 +55,7 @@ Do not mark these choices resolved merely because the prototype uses Python, SQL
 
 ## 4. Reproducible verification evidence
 
-The archive's verification report records:
+The separately delivered archive's verification report records (these are not repository CI results):
 - `python -m pytest -q`: 94 passed, Linux container, Python 3.13.5.
 - `python -m compileall -q src/fairy`: passed.
 - Exact ZIP extraction with Unix executable mode preservation.
