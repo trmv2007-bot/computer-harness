@@ -78,7 +78,7 @@ async function createIpcClient() {
     socket.on("data", (chunk) => {
       buffer += chunk.toString("utf8");
       if (Buffer.byteLength(buffer, "utf8") > MAX_RESPONSE_BYTES) {
-        finish(new Error("Fairy IPC response exceeds the 64 KiB limit"));
+        finish(new Error("Fairy IPC response exceeds the 8 MiB limit"));
         return;
       }
       const newline = buffer.indexOf("\n");
