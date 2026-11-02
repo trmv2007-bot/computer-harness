@@ -9,7 +9,7 @@ use std::{
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
-    sync::watch,
+    sync::{watch, Semaphore},
     time::timeout,
 };
 use tracing::{info, warn};
@@ -100,6 +100,8 @@ pub async fn serve(data_dir: &Path, db_path: PathBuf) -> Result<()> {
     info!(%address, "Fairy local control plane listening");
 
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
+    // Fixed admission limit: local clients cannot create an unbounded number of tasks.
+    let connection_slots = std::sync::Arc::new(Semaphore::new(8));
     loop {
         tokio::select! {
             changed = shutdown_rx.changed() => {
@@ -113,11 +115,20 @@ pub async fn serve(data_dir: &Path, db_path: PathBuf) -> Result<()> {
                 let token = token.clone();
                 let db_path = db_path.clone();
                 let shutdown = shutdown_tx.clone();
-                tokio::spawn(async move {
-                    if let Err(error) = handle_client(stream, token, db_path, shutdown).await {
-                        warn!(%peer, error = %error, "local IPC request failed");
+                match connection_slots.clone().try_acquire_owned() {
+                    Ok(permit) => {
+                        tokio::spawn(async move {
+                            let _permit = permit;
+                            if let Err(error) = handle_client(stream, token, db_path, shutdown).await {
+                                warn!(%peer, error = %error, "local IPC request failed");
+                            }
+                        });
                     }
-                });
+                    Err(_) => {
+                        warn!(%peer, "local IPC connection limit reached; rejecting client");
+                        drop(stream);
+                    }
+                }
             }
             signal = tokio::signal::ctrl_c() => {
                 signal.context("wait for shutdown signal")?;
@@ -184,7 +195,9 @@ async fn handle_client(
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half).take(MAX_REQUEST_BYTES as u64);
     let mut line = String::new();
-    let count = reader.read_line(&mut line).await?;
+    let count = timeout(Duration::from_secs(5), reader.read_line(&mut line))
+        .await
+        .context("timed out reading local IPC request")??;
     let response = if count == 0 || count >= MAX_REQUEST_BYTES {
         Response::failure("request is empty or exceeds the 64 KiB limit")
     } else {
