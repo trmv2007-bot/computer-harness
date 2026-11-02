@@ -6,12 +6,12 @@ This document defines boundaries for implementation. It does not claim the adapt
 The long-lived control plane owns task state, event dispatch, policy checks, worker admission, provider health, checkpoints and audit records. It must not run browser automation, screenshots, indexing, builds or model inference inside its event loop.
 
 ## Persistent task contract
-A task has an immutable identifier, human-readable title, objective, lifecycle state, timestamps, dependency references, resource budget, permission envelope, checkpoints, evidence and recovery policy. The current SQLite schema implements identity, title, objective, state, timestamps, event log, capability grants, action-scoped approvals and app settings. Task scheduling, worker leases, checkpoints, retry/recovery and durable result/evidence records remain future work. Task create/state/cancel operations and their task events are now transactional.
+A task has an immutable identifier, human-readable title, objective, lifecycle state, timestamps, dependency references, resource budget, permission envelope, checkpoints, evidence and recovery policy. The current SQLite schema implements identity, title, objective, state, timestamps, event log, capability grants, action-scoped approvals, app settings and durable task-run attempts/results/usage. Manual read-only task inspections are persisted; a successful provider response moves the task to paused for owner review, not completed. Automatic scheduling, worker leases, checkpoints, crash recovery and independent completion evidence remain future work. Task create/state/cancel/run operations and their events are transactional.
 
 Allowed state transitions (target contract):
 - queued -> running | paused | cancelled | failed
-- running -> paused | completed | failed | cancelled
-- paused -> queued | cancelled | failed
+- running -> paused (only as the result of a successful, persisted inspection attempt) | failed (failed attempt)
+- paused -> queued | completed (explicit owner acceptance) | cancelled | failed
 - failed -> queued (explicit retry only)
 - completed and cancelled are terminal
 
@@ -32,7 +32,7 @@ Every tool registration must declare:
 - timeout, cancellation behavior and resource estimate;
 - evidence emitted and verification strategy.
 
-Target rule: all invocations pass through a single permission gateway and append an audit event. Models never receive raw unrestricted shell or filesystem authority by default. Current implementation: typed registry, exact-name capability grants, action-scoped approvals, one-time approval consumption and side-effect evaluator exist. The first two tools are workspace-bounded read-only filesystem operations. Canonical path checks are not an OS sandbox and remain vulnerable to path races.
+Target rule: all invocations pass through a single permission gateway and append an audit event. Models never receive raw unrestricted shell or filesystem authority by default. Current implementation: typed registry, exact-name capability grants, action-scoped approvals, one-time approval consumption and side-effect evaluator exist. The first two tools are workspace-bounded read-only filesystem operations and use cap-std directory capabilities. Relative paths cannot escape through parent traversal or external symlinks. This restricts those tool operations; it does not sandbox the entire process or protect against a compromised same-user process. Common credential paths are blocked, but this is not comprehensive secret redaction.
 
 ## Safety contract
 Sensitive operations require an explicit capability grant and, where configured, an interactive approval. Destructive, administrator and external-communication effects require approval; financial and paid-inference actions are hard-denied by the current zero-spend policy. Approval records are action-scoped and support one-time consumption. Secrets are not yet comprehensively redacted from logs. Stop-all must work locally without network access and prevent new work from being admitted. A stop marker alone does not terminate already-running workers; a supervisor with cancellation tokens and process ownership is required before this feature can be called operational. The control plane can now be registered explicitly as a Windows logon task or Linux systemd user service; those OS lifecycle paths remain device-unverified.
