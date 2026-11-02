@@ -1,27 +1,50 @@
 # Computer Harness
 
-**Planning phase — implementation not yet authorized.**
+**Status: implementation underway.** The owner authorized the build with `START THE BUILD` on 2026-11-02. The first Fairy runtime prototype (0.3.0) is integrated on the review branch `feat/fairy-runtime-0.3.0`; it has not been merged into `main`.
 
-Computer Harness is planned as a persistent, federated, cross-platform computer-agent runtime, with **Fairy** as its adaptive, proactive companion and primary coordinator.
+Computer Harness is a persistent, federated, cross-platform computer-agent runtime. **Fairy** is its adaptive companion and primary coordinator. The original planning specification remains the architectural source of truth; this integration is a Windows-first prototype, not a claim that every platform or milestone is complete.
 
-## Planning documents
+## Project documents
 
-- [Computer Harness Planning Specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md) — product vision, agreed decisions, architecture, autonomy, parallel execution, providers, gaming mode, memory, self-improvement, security, networking, roadmap and acceptance criteria.
-- [Build Tracking Checklist](docs/BUILD_TRACKING_CHECKLIST.md) — milestone gates, implementation traceability and definition of done.
+- [Planning specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md) — agreed product decisions, conceptual architecture, autonomy, providers, memory, self-development, security and acceptance criteria.
+- [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md) — milestone gates and current evidence status.
+- [Fairy runtime integration record](docs/FAIRY_RUNTIME_INTEGRATION.md) — what 0.3.0 supplies, how it maps to the specification, verification and outstanding work.
 
-## Current direction
+## Current implementation
 
-- CLI first; dashboard later.
-- Windows-first rollout, with Windows, Linux and Android as supported targets.
-- Persistent federated nodes with hybrid networking and hybrid memory; Windows is the first implementation target.
-- Cloud-first, quality-first intelligence with replaceable provider and agent-engine adapters.
-- Adaptive parallel execution and Gaming Mode, with a performance-first lightweight runtime.
-- High proactivity, full project initiative and full self-development under explicit safety gates.
-- Lightweight, cloud-first execution: a small always-on core, bounded on-demand workers and platform-specific resource governors.
-- Evidence-based verification, durable task recovery, audit history and emergency stop.
+The current prototype is distributed as a versioned source bundle:
 
-## Implementation authorization
+- [Fairy Harness 0.3.0 source archive](runtime/fairy/releases/fairy-harness-0.3.0.zip)
+- SHA-256: `cc77a8756d99a77a4d071ebd0eb9c3eb777057bd7f4267ce26f83ac62b171896`
+- Exact archive size: 166,555 bytes.
+- Verification baseline: Linux, Python 3.13.5, 94 offline tests passed; see the integration record for limitations.
 
-**Do not begin product implementation until the owner explicitly says `START THE BUILD`.**
+The bundle contains a Python CLI/daemon prototype, local SQLite/FTS5 memory, optional Qoder-backed Claude Code adapter client, budget controls, task/initiative workflow, specialist agent/team profiles, approval-gated desktop/browser/Android brokers, voice hooks and a local HUD. Hardware- and provider-dependent capabilities remain unverified until tested on the target Windows machine.
 
-The planning documents are the source of truth. Any implementation must map requirements to code, tests and recorded evidence.
+## Architecture and scope discipline
+
+The planning specification recommends evaluating a Rust-first shared core with thin platform adapters. Fairy 0.3.0 is a Python Windows-first vertical slice. That is an implementation bridge to test product behavior; it does **not** silently settle the open language, IPC, provider/engine, federation or resource-budget decisions.
+
+Current release limitations are explicit:
+
+- Windows target hardware and microphone have not been tested here.
+- Live Qoder authentication, model generation and Claude Code tool compatibility have not been exercised.
+- Linux/Android native nodes and federated networking are not implemented.
+- Browser/ADB integration is protocol-tested with mocks, not live devices.
+- Adaptive Gaming Mode, full GUI vision, general dependency-DAG parallelism and staged self-development promotion remain incomplete.
+
+See the integration record and checklist before treating any gate as complete.
+
+## Safety and cost rules
+
+- The existing Qoder adapter/login is an optional provider/engine integration; this prototype does not replace it or bundle credentials.
+- Cloud use is disabled by default. No paid fallback, credit purchase, provider-limit bypass or automatic quota evasion is allowed.
+- Project roots must be explicitly allowlisted. Automated delivery uses a Fairy-managed worktree and leaves changes uncommitted for review.
+- Browser, Android, voice and computer actions are disabled or constrained by default and require explicit configuration/approval.
+- Do not commit local config, API keys, transcripts, SQLite databases, usage ledgers, screenshots, browser profiles or personal memory.
+
+## Working with the prototype
+
+Extract the archive to a local development directory, then follow its bundled README. Do not unpack the runtime over an existing Computer Harness installation until migration and backup procedures have been reviewed.
+
+The current PR is intentionally not merged. Merge only after reviewing its file list, implementation record and remaining acceptance gates.
