@@ -182,6 +182,7 @@ async function main() {
     },
   });
 
+  let finalResult = null;
   try {
     for await (const message of q) {
       if (message.type === "assistant") {
@@ -190,11 +191,32 @@ async function main() {
           else if (block.type === "tool_use") emit("tool", { name: block.name });
         }
       } else if (message.type === "result") {
+        finalResult = message;
         emit("result", {
           subtype: message.subtype,
           result: typeof message.result === "string" ? message.result : undefined,
+          isError: message.subtype === "success" ? Boolean(message.is_error) : true,
+          errors: Array.isArray(message.errors) ? message.errors : undefined,
+          errorCode: message.error_code,
+          totalCredits: message.total_credits,
         });
       }
+    }
+
+    if (!finalResult) {
+      throw new Error("Qoder SDK stream ended without a final result message");
+    }
+    if (finalResult.subtype !== "success" || finalResult.is_error) {
+      const errors = Array.isArray(finalResult.errors) ? finalResult.errors : [];
+      const detail = errors.length > 0
+        ? errors.join("; ")
+        : (typeof finalResult.result === "string" ? finalResult.result : "Qoder reported an unsuccessful result");
+      emit("error", {
+        message: detail,
+        errorCode: finalResult.error_code,
+        subtype: finalResult.subtype,
+      });
+      process.exitCode = 2;
     }
 
     const usage = await q.getUsageInfo().catch(() => null);
@@ -202,11 +224,19 @@ async function main() {
       emit("usage", {
         userType: usage.userType,
         totalUsagePercentage: usage.totalUsagePercentage,
+        isQuotaExceeded: usage.isQuotaExceeded,
         userQuota: usage.userQuota
           ? {
               remaining: usage.userQuota.remaining,
               total: usage.userQuota.total,
               unit: usage.userQuota.unit,
+            }
+          : undefined,
+        addOnQuota: usage.addOnQuota
+          ? {
+              remaining: usage.addOnQuota.remaining,
+              total: usage.addOnQuota.total,
+              unit: usage.addOnQuota.unit,
             }
           : undefined,
         session: usage.session
