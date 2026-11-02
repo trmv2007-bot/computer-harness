@@ -521,13 +521,9 @@ async fn main() -> Result<()> {
                         }
                         Err(error) => {
                             let detail = error.to_string();
-                            if let Err(persist_error) = store.finish_task_run(
-                                &run.id,
-                                false,
-                                None,
-                                Some(&detail),
-                                None,
-                            ) {
+                            if let Err(persist_error) =
+                                store.finish_task_run(&run.id, false, None, Some(&detail), None)
+                            {
                                 return Err(error.context(format!(
                                     "additionally failed to persist the task-run failure: {persist_error}"
                                 )));
