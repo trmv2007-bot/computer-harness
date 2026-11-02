@@ -10,7 +10,11 @@ use tracing::{info, Level};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "fairy", version, about = "Computer Harness — Fairy runtime CLI")]
+#[command(
+    name = "fairy",
+    version,
+    about = "Computer Harness — Fairy runtime CLI"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -77,7 +81,9 @@ fn print_json<T: Serialize>(value: &T) -> Result<()> {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let cli = Cli::parse();
