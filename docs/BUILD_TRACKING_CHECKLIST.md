@@ -51,7 +51,7 @@ Latest CI evidence must be refreshed against the current branch head after each 
 - [ ] Provider outage and context handoff tests.
 
 ### Gate 3 — Tool and safety gateway
-- [ ] Typed tool registry and platform capability declarations (initial workspace list/read tools exist; OS adapters and broader tools remain open).
+- [ ] Typed tool registry and platform capability declarations (workspace read tools and Windows-only `desktop.list_windows` observation with explicit `desktop.observe` grant exist; input injection, browser and broader OS adapters remain open).
 - [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approvals, a central policy evaluator, two read-only filesystem executors and audited tool RPC exist; write tools, whole-process sandboxing and comprehensive secret redaction remain open).
 - [ ] Sandboxed execution and secret redaction (workspace access uses cap-std directory capabilities and blocks common credential paths; the whole process is not sandboxed and secret-pattern coverage is not comprehensive).
 - [ ] Cancellation, timeouts and side-effect classification.
