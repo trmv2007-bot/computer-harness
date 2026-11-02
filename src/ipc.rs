@@ -226,6 +226,10 @@ async fn handle_client(
         }
     };
     let mut encoded = serde_json::to_vec(&response)?;
+    anyhow::ensure!(
+        encoded.len() <= MAX_RESPONSE_BYTES,
+        "response exceeds the 8 MiB IPC limit"
+    );
     encoded.push(b'\n');
     write_half.write_all(&encoded).await?;
     write_half.shutdown().await?;
