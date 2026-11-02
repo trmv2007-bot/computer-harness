@@ -14,11 +14,11 @@ use std::{
     process::Stdio,
     time::Duration,
 };
+use store::Store;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command as TokioCommand,
 };
-use store::Store;
 use tracing::{info, Level};
 use tracing_subscriber::EnvFilter;
 
