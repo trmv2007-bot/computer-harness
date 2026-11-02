@@ -260,6 +260,8 @@ async fn agent_ask(
     store: &Store,
     prompt: &str,
 ) -> Result<AgentOutcome> {
+    const AGENT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
     anyhow::ensure!(
         prompt.len() <= 32 * 1024,
         "prompt exceeds the 32 KiB Qoder worker limit"
@@ -306,88 +308,108 @@ async fn agent_ask(
         .spawn()
         .context("start Node.js Qoder worker; verify Node.js 18+ is on PATH")?;
 
-    let payload = serde_json::to_vec(&serde_json::json!({"prompt":prompt}))?;
-    let mut stdin = child
-        .stdin
-        .take()
-        .context("open Qoder worker input stream")?;
-    stdin.write_all(&payload).await?;
-    stdin.write_all(b"\n").await?;
-    drop(stdin);
+    let execution = tokio::time::timeout(AGENT_TIMEOUT, async {
+        let payload = serde_json::to_vec(&serde_json::json!({"prompt":prompt}))?;
+        let mut stdin = child
+            .stdin
+            .take()
+            .context("open Qoder worker input stream")?;
+        stdin.write_all(&payload).await?;
+        stdin.write_all(b"\n").await?;
+        drop(stdin);
 
-    let stdout = child
-        .stdout
-        .take()
-        .context("open Qoder worker output stream")?;
-    let mut lines = BufReader::new(stdout).lines();
-    let mut final_result: Option<String> = None;
-    let mut final_error: Option<String> = None;
-    let mut usage: Option<serde_json::Value> = None;
-    while let Some(line) = lines.next_line().await? {
-        let event: serde_json::Value =
-            serde_json::from_str(&line).context("Qoder worker emitted invalid JSON")?;
-        match event["type"].as_str().unwrap_or_default() {
-            "text" => {
-                print!("{}", event["text"].as_str().unwrap_or_default());
-                std::io::stdout().flush()?;
-            }
-            "tool" => {
-                eprintln!(
-                    "\n[Fairy tool] {}",
-                    event["name"].as_str().unwrap_or("unknown")
-                );
-            }
-            "result" => {
-                let subtype = event["subtype"].as_str().unwrap_or("unknown");
-                let is_error = event["isError"].as_bool().unwrap_or(true);
-                eprintln!("\n[Qoder result] {subtype} (is_error={is_error})");
-                if subtype == "success" && !is_error {
-                    final_result = event["result"].as_str().map(str::to_owned);
-                } else {
-                    final_error = event["errors"]
-                        .as_array()
-                        .map(|items| {
-                            items
-                                .iter()
-                                .filter_map(serde_json::Value::as_str)
-                                .collect::<Vec<_>>()
-                                .join("; ")
-                        })
-                        .filter(|value| !value.is_empty())
-                        .or_else(|| event["result"].as_str().map(str::to_owned))
-                        .or_else(|| Some(format!("Qoder result ended with subtype '{subtype}'")));
+        let stdout = child
+            .stdout
+            .take()
+            .context("open Qoder worker output stream")?;
+        let mut lines = BufReader::new(stdout).lines();
+        let mut final_result: Option<String> = None;
+        let mut final_error: Option<String> = None;
+        let mut usage: Option<serde_json::Value> = None;
+        while let Some(line) = lines.next_line().await? {
+            let event: serde_json::Value =
+                serde_json::from_str(&line).context("Qoder worker emitted invalid JSON")?;
+            match event["type"].as_str().unwrap_or_default() {
+                "text" => {
+                    print!("{}", event["text"].as_str().unwrap_or_default());
+                    std::io::stdout().flush()?;
                 }
+                "tool" => {
+                    eprintln!(
+                        "\n[Fairy tool] {}",
+                        event["name"].as_str().unwrap_or("unknown")
+                    );
+                }
+                "result" => {
+                    let subtype = event["subtype"].as_str().unwrap_or("unknown");
+                    let is_error = event["isError"].as_bool().unwrap_or(true);
+                    eprintln!("\n[Qoder result] {subtype} (is_error={is_error})");
+                    if subtype == "success" && !is_error {
+                        final_result = event["result"].as_str().map(str::to_owned);
+                    } else {
+                        final_error = event["errors"]
+                            .as_array()
+                            .map(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(serde_json::Value::as_str)
+                                    .collect::<Vec<_>>()
+                                    .join("; ")
+                            })
+                            .filter(|value| !value.is_empty())
+                            .or_else(|| event["result"].as_str().map(str::to_owned))
+                            .or_else(|| {
+                                Some(format!("Qoder result ended with subtype '{subtype}'"))
+                            });
+                    }
+                }
+                "usage" => {
+                    usage = Some(event.clone());
+                    eprintln!("[Qoder usage] {}", event);
+                }
+                "error" => {
+                    let message = event["message"]
+                        .as_str()
+                        .unwrap_or("unknown error")
+                        .to_owned();
+                    eprintln!("[Qoder error] {message}");
+                    final_error = Some(message);
+                }
+                _ => {}
             }
-            "usage" => {
-                usage = Some(event.clone());
-                eprintln!("[Qoder usage] {}", event);
-            }
-            "error" => {
-                let message = event["message"]
-                    .as_str()
-                    .unwrap_or("unknown error")
-                    .to_owned();
-                eprintln!("[Qoder error] {message}");
-                final_error = Some(message);
-            }
-            _ => {}
+        }
+
+        let status = child.wait().await.context("wait for Qoder worker")?;
+        if !status.success() {
+            anyhow::bail!(
+                "Qoder Agent worker exited unsuccessfully ({status}): {}",
+                final_error
+                    .as_deref()
+                    .unwrap_or("no error detail was provided")
+            );
+        }
+        if let Some(error) = final_error {
+            anyhow::bail!("Qoder Agent request failed: {error}");
+        }
+        let result = final_result.context("Qoder worker exited without a successful result")?;
+        anyhow::ensure!(
+            !result.trim().is_empty(),
+            "Qoder worker returned an empty successful result"
+        );
+        Ok::<AgentOutcome, anyhow::Error>(AgentOutcome { result, usage })
+    })
+    .await;
+
+    match execution {
+        Ok(result) => result,
+        Err(_) => {
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+            anyhow::bail!(
+                "Qoder Agent request exceeded the 5-minute execution limit; the worker process was terminated"
+            );
         }
     }
-
-    let status = child.wait().await.context("wait for Qoder worker")?;
-    if !status.success() {
-        anyhow::bail!(
-            "Qoder Agent worker exited unsuccessfully ({status}): {}",
-            final_error
-                .as_deref()
-                .unwrap_or("no error detail was provided")
-        );
-    }
-    if let Some(error) = final_error {
-        anyhow::bail!("Qoder Agent request failed: {error}");
-    }
-    let result = final_result.context("Qoder worker exited without a successful result")?;
-    Ok(AgentOutcome { result, usage })
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -498,8 +520,17 @@ async fn main() -> Result<()> {
                         }
                         Err(error) => {
                             let detail = error.to_string();
-                            let _ =
-                                store.finish_task_run(&run.id, false, None, Some(&detail), None);
+                            if let Err(persist_error) = store.finish_task_run(
+                                &run.id,
+                                false,
+                                None,
+                                Some(&detail),
+                                None,
+                            ) {
+                                return Err(error.context(format!(
+                                    "additionally failed to persist the task-run failure: {persist_error}"
+                                )));
+                            }
                             return Err(error);
                         }
                     }
