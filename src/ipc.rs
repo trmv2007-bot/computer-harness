@@ -24,6 +24,7 @@ pub enum IpcCommand {
     GetTask { id: String },
     CreateTask { title: String, objective: String },
     CancelTask { id: String },
+    SetTaskState { id: String, state: String },
     Shutdown,
 }
 
@@ -116,6 +117,10 @@ pub async fn serve(data_dir: &Path, db_path: PathBuf) -> Result<()> {
     Ok(())
 }
 
+pub async fn is_running(data_dir: &Path) -> bool {
+    request(data_dir, IpcCommand::Ping).await.is_ok()
+}
+
 pub async fn request(data_dir: &Path, action: IpcCommand) -> Result<Response> {
     let endpoint = fs::read_to_string(data_dir.join(ENDPOINT_FILE))
         .context("Fairy control plane endpoint is unavailable; start it with 'fairy serve'")?;
@@ -204,6 +209,9 @@ async fn dispatch(
                     IpcCommand::CancelTask { id } => {
                         anyhow::ensure!(store.cancel_task(&id)?, "task not found or no longer cancellable");
                         Ok(json!({"id":id,"state":"cancelled"}))
+                    }
+                    IpcCommand::SetTaskState { id, state } => {
+                        Ok(json!(store.transition_task(&id, &state)?))
                     }
                     IpcCommand::Ping | IpcCommand::Shutdown => unreachable!("handled above"),
                 }
