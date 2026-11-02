@@ -1,7 +1,10 @@
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use std::{path::Path, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Task {
@@ -19,7 +22,7 @@ pub struct Store {
 
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
-        if let Some(parent) = path.parent() {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(path).context("open task database")?;
@@ -54,8 +57,9 @@ impl Store {
                 state TEXT NOT NULL CHECK(state IN ('pending','approved','denied')),
                 created_at INTEGER NOT NULL
              );
-             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','1');"
-        ).context("initialize database schema")?;
+             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','1');",
+        )
+        .context("initialize database schema")?;
         Ok(Self { conn })
     }
 
@@ -84,24 +88,40 @@ impl Store {
 
     pub fn list_tasks(&self) -> Result<Vec<Task>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id,title,objective,state,created_at,updated_at FROM tasks ORDER BY created_at DESC"
+            "SELECT id,title,objective,state,created_at,updated_at FROM tasks ORDER BY created_at DESC",
         )?;
-        let rows = stmt.query_map([], |r| Ok(Task {
-            id: r.get(0)?, title: r.get(1)?, objective: r.get(2)?, state: r.get(3)?,
-            created_at: r.get(4)?, updated_at: r.get(5)?,
-        }))?;
-        rows.collect::<rusqlite::Result<Vec<_>>>().context("read tasks")
+        let rows = stmt.query_map([], |r| {
+            Ok(Task {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                objective: r.get(2)?,
+                state: r.get(3)?,
+                created_at: r.get(4)?,
+                updated_at: r.get(5)?,
+            })
+        })?;
+        rows.collect::<rusqlite::Result<Vec<_>>>()
+            .context("read tasks")
     }
 
     pub fn get_task(&self, id: &str) -> Result<Option<Task>> {
-        self.conn.query_row(
-            "SELECT id,title,objective,state,created_at,updated_at FROM tasks WHERE id=?1",
-            [id],
-            |r| Ok(Task {
-                id:r.get(0)?, title:r.get(1)?, objective:r.get(2)?, state:r.get(3)?,
-                created_at:r.get(4)?, updated_at:r.get(5)?,
-            })
-        ).optional().context("read task")
+        self.conn
+            .query_row(
+                "SELECT id,title,objective,state,created_at,updated_at FROM tasks WHERE id=?1",
+                [id],
+                |r| {
+                    Ok(Task {
+                        id: r.get(0)?,
+                        title: r.get(1)?,
+                        objective: r.get(2)?,
+                        state: r.get(3)?,
+                        created_at: r.get(4)?,
+                        updated_at: r.get(5)?,
+                    })
+                },
+            )
+            .optional()
+            .context("read task")
     }
 
     pub fn cancel_task(&self, id: &str) -> Result<bool> {
@@ -125,17 +145,23 @@ impl Store {
     }
 
     pub fn event_count(&self) -> Result<i64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?)
     }
 }
 
 fn now() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn task_lifecycle_persists_and_cancels() {
         let dir = tempfile::tempdir().unwrap();
@@ -143,7 +169,9 @@ mod tests {
         let id;
         {
             let store = Store::open(&path).unwrap();
-            let task = store.create_task("Build tests", "Add a persistent task test").unwrap();
+            let task = store
+                .create_task("Build tests", "Add a persistent task test")
+                .unwrap();
             id = task.id.clone();
             assert_eq!(task.state, "queued");
             assert_eq!(store.list_tasks().unwrap().len(), 1);
