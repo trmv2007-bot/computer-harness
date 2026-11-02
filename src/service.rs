@@ -53,9 +53,9 @@ pub async fn install(_data_dir: &Path) -> Result<String> {
 }
 
 pub async fn uninstall(data_dir: &Path) -> Result<String> {
+    let _ = data_dir;
     #[cfg(windows)]
     {
-        let _ = data_dir;
         let status = Command::new("schtasks")
             .args(["/Delete", "/TN", WINDOWS_TASK, "/F"])
             .status()
@@ -192,7 +192,7 @@ fn linux_unit_path() -> Result<PathBuf> {
     Ok(config_dir.join("systemd").join("user").join(LINUX_UNIT))
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn linux_unit_contents(executable: &Path) -> Result<String> {
     let executable = executable
         .to_str()
@@ -205,7 +205,46 @@ fn linux_unit_contents(executable: &Path) -> Result<String> {
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('%', "%%")
-        .replace('$', "\\$");
+        .replace('
+    Ok(format!(
+        "[Unit]\nDescription=Computer Harness Fairy Runtime\nAfter=default.target\n\n[Service]\nType=simple\nExecStart=\"{escaped}\" serve\nRestart=on-failure\nRestartSec=3\nKillSignal=SIGINT\nTimeoutStopSec=15\nUMask=0077\n\n[Install]\nWantedBy=default.target\n"
+    ))
+}
+
+#[cfg(target_os = "linux")]
+async fn systemctl(args: &[&str]) -> Result<()> {
+    let status = Command::new("systemctl")
+        .arg("--user")
+        .args(args)
+        .status()
+        .await
+        .context("start systemctl --user")?;
+    anyhow::ensure!(status.success(), "systemctl --user {:?} failed: {status}", args);
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn systemd_unit_quotes_paths_and_enables_restart() {
+        let path = Path::new("/home/test/Fairy Runtime/bin/fairy");
+        let unit = linux_unit_contents(path).unwrap();
+        assert!(unit.contains("ExecStart=\"/home/test/Fairy Runtime/bin/fairy\" serve"));
+        assert!(unit.contains("Restart=on-failure"));
+        assert!(unit.contains("UMask=0077"));
+    }
+
+    #[test]
+    fn systemd_unit_escapes_specifiers_and_rejects_newlines() {
+        let path = Path::new("/home/test/100%/$fairy");
+        let unit = linux_unit_contents(path).unwrap();
+        assert!(unit.contains("100%%/$fairy"));
+        assert!(linux_unit_contents(Path::new("/tmp/fairy\nservice")).is_err());
+    }
+}
+, "$");
     Ok(format!(
         "[Unit]\nDescription=Computer Harness Fairy Runtime\nAfter=default.target\n\n[Service]\nType=simple\nExecStart=\"{escaped}\" serve\nRestart=on-failure\nRestartSec=3\nKillSignal=SIGINT\nTimeoutStopSec=15\nUMask=0077\n\n[Install]\nWantedBy=default.target\n"
     ))
