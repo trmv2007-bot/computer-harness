@@ -199,7 +199,7 @@ impl Store {
             .get_task(id)?
             .ok_or_else(|| anyhow::anyhow!("task not found: {id}"))?;
         let allowed = match current.state.as_str() {
-            "queued" => matches!(next, "running" | "paused" | "failed" | "cancelled"),
+            "queued" => matches!(next, "paused" | "failed" | "cancelled"),
             "running" => false,
             "paused" => matches!(next, "queued" | "completed" | "failed" | "cancelled"),
             "failed" => next == "queued",
@@ -295,6 +295,14 @@ impl Store {
         error: Option<&str>,
         usage: Option<&Value>,
     ) -> Result<TaskRun> {
+        if succeeded {
+            anyhow::ensure!(result.is_some(), "successful task runs must persist a result");
+        } else {
+            anyhow::ensure!(
+                error.is_some_and(|value| !value.trim().is_empty()),
+                "failed task runs must persist an error"
+            );
+        }
         if let Some(text) = result {
             anyhow::ensure!(text.len() <= 2 * 1024 * 1024, "task result exceeds the 2 MiB limit");
         }
@@ -305,6 +313,9 @@ impl Store {
         let next_task_state = if succeeded { "paused" } else { "failed" };
         let finished_at = now();
         let usage_json = usage.map(serde_json::to_string).transpose()?;
+        if let Some(serialized) = usage_json.as_deref() {
+            anyhow::ensure!(serialized.len() <= 4096, "task usage snapshot exceeds 4 KiB");
+        }
 
         let tx = self.conn.unchecked_transaction()?;
         let task_id: String = tx
@@ -825,6 +836,9 @@ mod tests {
         let task = store
             .create_task("State machine", "Verify legal transitions")
             .unwrap();
+
+        let running = store.transition_task(&task.id, "running");
+        assert!(running.is_err());
         let paused = store.transition_task(&task.id, "paused").unwrap();
         assert_eq!(paused.state, "paused");
         let completed = store.transition_task(&task.id, "completed").unwrap();
