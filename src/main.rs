@@ -47,6 +47,8 @@ enum TaskCommand {
     Show { id: String },
     /// Cancel a queued/running/paused task.
     Cancel { id: String },
+    /// Move a task through a validated lifecycle transition.
+    SetState { id: String, state: String },
 }
 
 #[derive(Serialize)]
@@ -132,6 +134,10 @@ async fn main() -> Result<()> {
                 } else {
                     anyhow::bail!("task not found or no longer cancellable: {id}");
                 }
+            }
+            TaskCommand::SetState { id, state } => {
+                let task = store.transition_task(&id, &state)?;
+                print_json(&task)?;
             }
         },
         Command::StopAll => {
