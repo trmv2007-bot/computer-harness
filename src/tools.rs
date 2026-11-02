@@ -243,10 +243,54 @@ struct ReadInput {
     path: String,
 }
 
+fn ensure_not_sensitive_path(relative: &Path) -> Result<()> {
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            continue;
+        };
+        let name = name.to_string_lossy().to_ascii_lowercase();
+        let extension = Path::new(&name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+
+        let sensitive_directory = matches!(
+            name.as_str(),
+            ".git"
+                | ".ssh"
+                | ".aws"
+                | ".azure"
+                | ".gnupg"
+                | ".kube"
+                | ".docker"
+                | ".npmrc"
+                | ".pypirc"
+                | ".netrc"
+                | "credentials"
+                | "secrets"
+        );
+        let sensitive_file = name == ".env"
+            || name.starts_with(".env.")
+            || matches!(
+                name.as_str(),
+                "id_rsa" | "id_ed25519" | "id_ecdsa" | "credentials.json"
+                    | "secrets.json" | "authorized_keys"
+            )
+            || matches!(extension, "pem" | "key" | "p12" | "pfx" | "jks" | "kdbx");
+        anyhow::ensure!(
+            !sensitive_directory && !sensitive_file,
+            "reading likely credential or secret material is blocked: {}",
+            relative.display()
+        );
+    }
+    Ok(())
+}
+
 fn read_text_file(root: &Dir, input_json: &str) -> Result<Value> {
     let input: ReadInput = serde_json::from_str(input_json)
         .context("filesystem.read_text requires a JSON path field")?;
     let relative = resolve_workspace_path(&input.path)?;
+    ensure_not_sensitive_path(&relative)?;
     let file: File = root
         .open(&relative)
         .context("open workspace text file through its directory capability")?;
@@ -367,6 +411,29 @@ mod tests {
         assert_eq!(result["entry_count"], 3);
         assert_eq!(result["entries"][0]["name"], "a.txt");
         assert_eq!(result["entries"][2]["name"], "z.txt");
+    }
+
+    #[test]
+    fn blocks_common_secret_and_credential_paths_before_opening() {
+        let workspace = tempfile::tempdir().unwrap();
+        fs::create_dir(workspace.path().join("secrets")).unwrap();
+        fs::write(workspace.path().join(".env"), "API_TOKEN=never-read").unwrap();
+        fs::write(workspace.path().join("private.pem"), "private-key").unwrap();
+        fs::write(workspace.path().join("secrets").join("service.txt"), "secret").unwrap();
+        let store = configured_store(workspace.path(), true);
+
+        for path in [".env", "private.pem", "secrets/service.txt", ".git/config"] {
+            assert!(
+                execute(
+                    &store,
+                    "filesystem.read_text",
+                    &format!(r#"{{"path":"{path}"}}"#),
+                    None
+                )
+                .is_err(),
+                "sensitive path unexpectedly allowed: {path}"
+            );
+        }
     }
 
     #[cfg(unix)]
