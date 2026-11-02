@@ -6,11 +6,11 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 
 ## Implemented in this branch
 
-- Rust CLI commands: `fairy doctor`, `fairy status`, `fairy run`.
+- Rust CLI commands: `fairy doctor`, `fairy status`, `fairy serve`, `fairy daemon status`, `fairy daemon shutdown`, `fairy run`.
 - Per-user data/config directory initialization.
 - SQLite database with WAL mode, schema version marker, durable task records and event log.
 - Task commands: `fairy task create <title> <objective>`, `fairy task list`, `fairy task show <id>`, `fairy task cancel <id>`.
-- Local stop-request marker via `fairy stop-all` (does not yet terminate workers).
+- Local stop-request marker via `fairy stop-all` (does not yet terminate workers).\n- Foreground loopback control plane (`fairy serve`) with per-user token authentication, bounded JSON requests, and task/status/shutdown RPC.
 - Windows/Linux CI workflow for formatting, Clippy, tests and release build.
 - Explicit architecture contracts and an implementation status ledger.
 
@@ -46,6 +46,6 @@ cargo run -- run
 
 ## Not implemented
 
-No background daemon/service or IPC; task scheduler/worker execution; provider/model routing; Qoder integration; permission/approval gateway; tool registry/execution; browser/GUI/computer control; durable memory/skills; secure device pairing/federation; Linux or Android platform adapters; vision/research pipeline; Gaming Mode/resource governor; notifications; self-improvement; dashboard; installer/updater. These are required project scope, not optional claims.
+No auto-starting or detached OS service; the current control plane must be started in a foreground terminal. No task scheduler/worker execution; provider/model routing; Qoder integration; permission/approval gateway; tool registry/execution; browser/GUI/computer control; durable memory/skills; secure device pairing/federation; Linux or Android platform adapters; vision/research pipeline; Gaming Mode/resource governor; notifications; self-improvement; dashboard; installer/updater. These are required project scope, not optional claims.
 
 No hosted model is assumed to provide unlimited zero-cost inference. Paid fallback is prohibited unless explicitly authorized. Windows/Linux CI and owner-device tests must pass before this prototype is accepted.
