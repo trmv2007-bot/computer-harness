@@ -21,6 +21,10 @@ npm run check
 
 The package pins `@qoder-ai/qoder-agent-sdk` 1.0.58 and `zod` 4.6.7. SDK installation runs the package's normal setup; it may download the compatible Qoder CLI runtime. Do not put a PAT or other secret in this repository. The worker uses `qodercliAuth()` to reuse the local Qoder sign-in.
 
+## Built-in specialist team
+
+Run `fairy team list` to inspect the available specialists, or `fairy team show engineer` for one profile's mission, integrated skill playbooks, operating rules and tool limits. Select a profile with `fairy agent ask --role engineer "..."`; task inspection currently selects the Auditor profile. These are prompt-specialized roles executed by the same Qoder worker, not separate concurrent processes. Their playbooks refine reasoning but cannot grant tools. All profiles currently receive only the two read-only workspace tools described below; researcher cannot browse the public web, operator cannot control the OS, and archivist cannot write persistent memory.
+
 ## Security model in this first integration
 
 The worker exposes only two Fairy MCP tools:
