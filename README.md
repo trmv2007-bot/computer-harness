@@ -1,27 +1,46 @@
 # Computer Harness
 
-**Planning phase — implementation not yet authorized.**
+**Implementation status: Milestone 1 scaffolding in progress.**
 
-Computer Harness is planned as a persistent, federated, cross-platform computer-agent runtime, with **Fairy** as its adaptive, proactive companion and primary coordinator.
+Computer Harness is a persistent, federated, cross-platform computer-agent runtime with **Fairy** as its adaptive companion and coordinator. The product is CLI-first; a dashboard is deferred until the CLI/runtime is dependable.
 
-## Planning documents
+## Current source slice
 
-- [Computer Harness Planning Specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md) — product vision, agreed decisions, architecture, autonomy, parallel execution, providers, gaming mode, memory, self-improvement, security, networking, roadmap and acceptance criteria.
-- [Build Tracking Checklist](docs/BUILD_TRACKING_CHECKLIST.md) — milestone gates, implementation traceability and definition of done.
+The `build/foundation-m1` branch currently contains:
+- Native Rust CLI entry point (`fairy doctor`, `fairy status`, `fairy run`).
+- Per-user application data/config directory initialization.
+- Machine-readable JSON status and diagnostics that explicitly avoid claiming authentication or platform-control support.
+- Foreground supervisor shell with clean Ctrl+C handling.
+- Windows/Linux GitHub Actions checks for formatting, Clippy, tests and release build.
+- An implementation status ledger that records what is and is not implemented.
 
-## Current direction
+This is scaffolding, not the completed persistent daemon or Fairy agent.
 
-- CLI first; dashboard later.
-- Windows-first rollout, with Windows, Linux and Android as supported targets.
-- Persistent federated nodes with hybrid networking and hybrid memory; Windows is the first implementation target.
-- Cloud-first, quality-first intelligence with replaceable provider and agent-engine adapters.
-- Adaptive parallel execution and Gaming Mode, with a performance-first lightweight runtime.
-- High proactivity, full project initiative and full self-development under explicit safety gates.
-- Lightweight, cloud-first execution: a small always-on core, bounded on-demand workers and platform-specific resource governors.
-- Evidence-based verification, durable task recovery, audit history and emergency stop.
+## Planning and tracking
 
-## Implementation authorization
+- [Planning specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md)
+- [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md)
+- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
 
-**Do not begin product implementation until the owner explicitly says `START THE BUILD`.**
+## Build from source
 
-The planning documents are the source of truth. Any implementation must map requirements to code, tests and recorded evidence.
+Install stable Rust with Cargo, then run:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets
+cargo build --release
+```
+
+Run:
+
+```sh
+cargo run -- doctor
+cargo run -- status
+cargo run -- run
+```
+
+## Non-claims
+
+The current source does not yet provide a persistent background daemon, task store, Qoder integration, model routing, permission gateway, tool registry, browser/GUI/computer control, memory, skills, federation, Android support, Gaming Mode or self-improvement. These remain required roadmap work. Hosted CI and owner-device tests must pass before the first slice is accepted.
