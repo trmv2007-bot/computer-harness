@@ -7,7 +7,17 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use serde::Serialize;
-use std::{fs, path::PathBuf, time::Duration};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    process::Command as TokioCommand,
+};
 use store::Store;
 use tracing::{info, Level};
 use tracing_subscriber::EnvFilter;
@@ -63,8 +73,21 @@ enum Command {
         #[command(subcommand)]
         action: ApprovalCommand,
     },
+    /// Run the optional Qoder Agent SDK worker.
+    Agent {
+        #[command(subcommand)]
+        action: AgentCommand,
+    },
     /// Request an emergency stop of eligible Fairy work.
     StopAll,
+}
+
+#[derive(Subcommand)]
+enum AgentCommand {
+    /// Install the pinned Qoder Agent SDK worker dependencies.
+    Setup,
+    /// Ask Fairy to inspect the configured workspace using the signed-in Qoder account.
+    Ask { prompt: String },
 }
 
 #[derive(Subcommand)]
@@ -168,6 +191,125 @@ fn paths() -> Result<(PathBuf, PathBuf)> {
 
 fn print_json<T: Serialize>(value: &T) -> Result<()> {
     println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
+}
+
+async fn agent_setup(agent_dir: &Path) -> Result<()> {
+    anyhow::ensure!(
+        agent_dir.join("package.json").is_file(),
+        "Qoder worker package manifest is missing"
+    );
+    let mut command = if cfg!(windows) {
+        let mut command = TokioCommand::new("cmd");
+        command.args(["/C", "npm", "install", "--no-audit", "--no-fund"]);
+        command
+    } else {
+        let mut command = TokioCommand::new("npm");
+        command.args(["install", "--no-audit", "--no-fund"]);
+        command
+    };
+    let status = command
+        .current_dir(agent_dir)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .await
+        .context("start npm to install the Qoder worker")?;
+    anyhow::ensure!(
+        status.success(),
+        "Qoder worker dependency installation failed: {status}"
+    );
+    Ok(())
+}
+
+async fn agent_ask(agent_dir: &Path, data_dir: &Path, store: &Store, prompt: &str) -> Result<()> {
+    anyhow::ensure!(
+        agent_dir
+            .join("node_modules")
+            .join("@qoder-ai")
+            .join("qoder-agent-sdk")
+            .join("package.json")
+            .is_file(),
+        "Qoder SDK is not installed; run 'fairy agent setup' first"
+    );
+    anyhow::ensure!(
+        ipc::is_running(data_dir).await,
+        "Fairy control plane is not running; start it with 'fairy serve' in another terminal"
+    );
+
+    let workspace = store
+        .get_setting("workspace_root")?
+        .context("workspace is not configured; use 'fairy workspace set <directory>'")?;
+    let workspace_path = PathBuf::from(&workspace)
+        .canonicalize()
+        .context("configured workspace is unavailable")?;
+    anyhow::ensure!(
+        workspace_path.is_dir(),
+        "configured workspace is not a directory"
+    );
+
+    let worker_path = agent_dir.join("qoder-worker.mjs");
+    let mut child = TokioCommand::new("node")
+        .arg(worker_path)
+        .current_dir(agent_dir)
+        .env("FAIRY_DATA_DIR", data_dir)
+        .env("FAIRY_WORKSPACE_ROOT", &workspace_path)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .spawn()
+        .context("start Node.js Qoder worker; verify Node.js 18+ is on PATH")?;
+
+    let payload = serde_json::to_vec(&serde_json::json!({"prompt":prompt}))?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .context("open Qoder worker input stream")?;
+    stdin.write_all(&payload).await?;
+    stdin.write_all(b"\n").await?;
+    drop(stdin);
+
+    let stdout = child
+        .stdout
+        .take()
+        .context("open Qoder worker output stream")?;
+    let mut lines = BufReader::new(stdout).lines();
+    while let Some(line) = lines.next_line().await? {
+        let event: serde_json::Value =
+            serde_json::from_str(&line).context("Qoder worker emitted invalid JSON")?;
+        match event["type"].as_str().unwrap_or_default() {
+            "text" => {
+                print!("{}", event["text"].as_str().unwrap_or_default());
+                std::io::stdout().flush()?;
+            }
+            "tool" => {
+                eprintln!(
+                    "\n[Fairy tool] {}",
+                    event["name"].as_str().unwrap_or("unknown")
+                );
+            }
+            "result" => {
+                eprintln!(
+                    "\n[Qoder result] {}",
+                    event["subtype"].as_str().unwrap_or("unknown")
+                );
+            }
+            "usage" => eprintln!("[Qoder usage] {}", event),
+            "error" => eprintln!(
+                "[Qoder error] {}",
+                event["message"].as_str().unwrap_or("unknown error")
+            ),
+            _ => {}
+        }
+    }
+
+    let status = child.wait().await.context("wait for Qoder worker")?;
+    anyhow::ensure!(
+        status.success(),
+        "Qoder Agent worker exited unsuccessfully: {status}"
+    );
     Ok(())
 }
 
@@ -352,6 +494,15 @@ async fn main() -> Result<()> {
                 println!("denied {id}");
             }
         },
+        Command::Agent { action } => {
+            let agent_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("agent");
+            match action {
+                AgentCommand::Setup => agent_setup(&agent_dir).await?,
+                AgentCommand::Ask { prompt } => {
+                    agent_ask(&agent_dir, &data_dir, &store, &prompt).await?;
+                }
+            }
+        }
         Command::StopAll => {
             let marker = data_dir.join("STOP_ALL");
             fs::write(&marker, b"stop requested\n")?;
