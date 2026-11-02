@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
+use serde_json::Value;
 use std::{
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
@@ -30,6 +31,19 @@ pub struct Task {
     pub state: String,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskRun {
+    pub id: String,
+    pub task_id: String,
+    pub prompt: String,
+    pub status: String,
+    pub result: Option<String>,
+    pub error: Option<String>,
+    pub usage: Option<Value>,
+    pub started_at: i64,
+    pub finished_at: Option<i64>,
 }
 
 pub struct Store {
@@ -89,9 +103,23 @@ impl Store {
                 value TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
              );
-             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','3');
-             UPDATE schema_meta SET value='3'
-                WHERE key='schema_version' AND CAST(value AS INTEGER)<3;
+             CREATE TABLE IF NOT EXISTS task_runs (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('running','succeeded','failed')),
+                result TEXT,
+                error TEXT,
+                usage_json TEXT,
+                started_at INTEGER NOT NULL,
+                finished_at INTEGER,
+                FOREIGN KEY(task_id) REFERENCES tasks(id)
+             );
+             CREATE INDEX IF NOT EXISTS idx_task_runs_task_started
+                ON task_runs(task_id, started_at DESC);
+             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','4');
+             UPDATE schema_meta SET value='4'
+                WHERE key='schema_version' AND CAST(value AS INTEGER)<4;
              COMMIT;",
         )
         .context("initialize database schema")?;
@@ -172,8 +200,8 @@ impl Store {
             .ok_or_else(|| anyhow::anyhow!("task not found: {id}"))?;
         let allowed = match current.state.as_str() {
             "queued" => matches!(next, "running" | "paused" | "failed" | "cancelled"),
-            "running" => matches!(next, "paused" | "completed" | "failed" | "cancelled"),
-            "paused" => matches!(next, "queued" | "failed" | "cancelled"),
+            "running" => false,
+            "paused" => matches!(next, "queued" | "completed" | "failed" | "cancelled"),
             "failed" => next == "queued",
             "completed" | "cancelled" => false,
             _ => false,
@@ -205,7 +233,7 @@ impl Store {
     pub fn cancel_task(&self, id: &str) -> Result<bool> {
         let tx = self.conn.unchecked_transaction()?;
         let changed = tx.execute(
-            "UPDATE tasks SET state='cancelled',updated_at=?2 WHERE id=?1 AND state IN ('queued','running','paused')",
+            "UPDATE tasks SET state='cancelled',updated_at=?2 WHERE id=?1 AND state IN ('queued','paused')",
             params![id, now()],
         )?;
         if changed > 0 {
@@ -213,6 +241,163 @@ impl Store {
         }
         tx.commit()?;
         Ok(changed > 0)
+    }
+
+    /// Persist a user-triggered, read-only agent attempt and atomically claim its task.
+    pub fn start_task_run(&self, task_id: &str, prompt: &str) -> Result<TaskRun> {
+        let prompt = prompt.trim();
+        anyhow::ensure!(!prompt.is_empty(), "task run prompt cannot be empty");
+        anyhow::ensure!(
+            prompt.len() <= 32 * 1024,
+            "task run prompt exceeds the 32 KiB limit"
+        );
+        let run = TaskRun {
+            id: uuid::Uuid::new_v4().to_string(),
+            task_id: task_id.to_owned(),
+            prompt: prompt.to_owned(),
+            status: "running".to_owned(),
+            result: None,
+            error: None,
+            usage: None,
+            started_at: now(),
+            finished_at: None,
+        };
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute(
+            "UPDATE tasks SET state='running',updated_at=?2 WHERE id=?1 AND state='queued'",
+            params![task_id, run.started_at],
+        )?;
+        anyhow::ensure!(
+            changed == 1,
+            "task not found or not queued; only queued tasks can be run"
+        );
+        tx.execute(
+            "INSERT INTO task_runs(id,task_id,prompt,status,started_at) VALUES(?1,?2,?3,'running',?4)",
+            params![run.id, run.task_id, run.prompt, run.started_at],
+        )?;
+        record_task_event_on(
+            &tx,
+            task_id,
+            "task.run_started",
+            &serde_json::json!({"run_id":run.id}).to_string(),
+        )?;
+        tx.commit()?;
+        Ok(run)
+    }
+
+    /// Record the provider outcome. Model success moves the task to paused for
+    /// human review; it is never treated as proof that the objective is complete.
+    pub fn finish_task_run(
+        &self,
+        run_id: &str,
+        succeeded: bool,
+        result: Option<&str>,
+        error: Option<&str>,
+        usage: Option<&Value>,
+    ) -> Result<TaskRun> {
+        if let Some(text) = result {
+            anyhow::ensure!(text.len() <= 2 * 1024 * 1024, "task result exceeds the 2 MiB limit");
+        }
+        if let Some(text) = error {
+            anyhow::ensure!(text.len() <= 8192, "task error exceeds the 8 KiB limit");
+        }
+        let next_run_state = if succeeded { "succeeded" } else { "failed" };
+        let next_task_state = if succeeded { "paused" } else { "failed" };
+        let finished_at = now();
+        let usage_json = usage.map(serde_json::to_string).transpose()?;
+
+        let tx = self.conn.unchecked_transaction()?;
+        let task_id: String = tx
+            .query_row(
+                "SELECT task_id FROM task_runs WHERE id=?1 AND status='running'",
+                [run_id],
+                |row| row.get(0),
+            )
+            .context("task run not found or already finished")?;
+        let changed = tx.execute(
+            "UPDATE task_runs SET status=?2,result=?3,error=?4,usage_json=?5,finished_at=?6
+             WHERE id=?1 AND status='running'",
+            params![run_id, next_run_state, result, error, usage_json, finished_at],
+        )?;
+        anyhow::ensure!(changed == 1, "task run changed concurrently; reload and retry");
+        let task_changed = tx.execute(
+            "UPDATE tasks SET state=?2,updated_at=?3 WHERE id=?1 AND state='running'",
+            params![task_id, next_task_state, finished_at],
+        )?;
+        anyhow::ensure!(task_changed == 1, "task is no longer running; run result was not applied");
+        record_task_event_on(
+            &tx,
+            &task_id,
+            "task.run_finished",
+            &serde_json::json!({
+                "run_id":run_id,
+                "status":next_run_state,
+                "result_bytes":result.map(str::len),
+                "has_error":error.is_some()
+            }).to_string(),
+        )?;
+        record_task_event_on(
+            &tx,
+            &task_id,
+            "task.state_changed",
+            &serde_json::json!({"from":"running","to":next_task_state,"reason":"agent_run_finished"}).to_string(),
+        )?;
+        tx.commit()?;
+        self.get_task_run(run_id)?
+            .ok_or_else(|| anyhow::anyhow!("task run disappeared after completion"))
+    }
+
+    pub fn latest_task_run(&self, task_id: &str) -> Result<Option<TaskRun>> {
+        let id: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT id FROM task_runs WHERE task_id=?1 ORDER BY started_at DESC LIMIT 1",
+                [task_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match id {
+            Some(id) => self.get_task_run(&id),
+            None => Ok(None),
+        }
+    }
+
+    fn get_task_run(&self, run_id: &str) -> Result<Option<TaskRun>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT id,task_id,prompt,status,result,error,usage_json,started_at,finished_at
+                 FROM task_runs WHERE id=?1",
+                [run_id],
+                |row| {
+                    let usage_json: Option<String> = row.get(6)?;
+                    let usage = usage_json
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()
+                        .map_err(|error| {
+                            rusqlite::Error::FromSqlConversionFailure(
+                                6,
+                                rusqlite::types::Type::Text,
+                                Box::new(error),
+                            )
+                        })?;
+                    Ok(TaskRun {
+                        id: row.get(0)?,
+                        task_id: row.get(1)?,
+                        prompt: row.get(2)?,
+                        status: row.get(3)?,
+                        result: row.get(4)?,
+                        error: row.get(5)?,
+                        usage,
+                        started_at: row.get(7)?,
+                        finished_at: row.get(8)?,
+                    })
+                },
+            )
+            .optional()
+            .context("read task run")?;
+        Ok(row)
     }
 
     pub fn grant_capability(&self, capability: &str, note: &str) -> Result<CapabilityGrant> {
@@ -555,6 +740,86 @@ mod tests {
     }
 
     #[test]
+    fn task_runs_persist_results_and_wait_for_owner_acceptance() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let task = store.create_task("Inspect workspace", "Summarize the project structure").unwrap();
+        let run = store.start_task_run(&task.id, "Inspect the project read-only").unwrap();
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "running");
+        assert!(!store.cancel_task(&task.id).unwrap());
+
+        let usage = serde_json::json!({"isQuotaExceeded":false,"session":{"total_credits":12}});
+        let finished = store
+            .finish_task_run(
+                &run.id,
+                true,
+                Some("Project contains a Rust CLI and a Node worker."),
+                None,
+                Some(&usage),
+            )
+            .unwrap();
+        assert_eq!(finished.status, "succeeded");
+        assert_eq!(finished.usage.as_ref().unwrap()["isQuotaExceeded"], false);
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "paused");
+        assert!(store.finish_task_run(&run.id, true, Some("duplicate"), None, None).is_err());
+
+        let latest = store.latest_task_run(&task.id).unwrap().unwrap();
+        assert_eq!(latest.result.as_deref(), Some("Project contains a Rust CLI and a Node worker."));
+        assert_eq!(
+            store.transition_task(&task.id, "completed").unwrap().state,
+            "completed"
+        );
+    }
+
+    #[test]
+    fn task_run_failures_mark_task_failed_and_can_be_retried_explicitly() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let task = store.create_task("Inspect workspace", "Read a project file").unwrap();
+        let run = store.start_task_run(&task.id, "Read a project file").unwrap();
+        let finished = store
+            .finish_task_run(&run.id, false, None, Some("Qoder quota unavailable"), None)
+            .unwrap();
+        assert_eq!(finished.status, "failed");
+        assert_eq!(finished.error.as_deref(), Some("Qoder quota unavailable"));
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "failed");
+        assert_eq!(store.transition_task(&task.id, "queued").unwrap().state, "queued");
+    }
+
+    #[test]
+    fn task_run_start_and_finish_are_atomic_with_the_event_log() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let task = store.create_task("Atomic run", "Test transaction boundaries").unwrap();
+        store
+            .conn
+            .execute_batch(
+                "CREATE TRIGGER reject_task_run_started
+                 BEFORE INSERT ON events
+                 WHEN NEW.event_type='task.run_started'
+                 BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
+            )
+            .unwrap();
+        assert!(store.start_task_run(&task.id, "Run prompt").is_err());
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "queued");
+        let run_count: i64 = store.conn.query_row("SELECT COUNT(*) FROM task_runs", [], |row| row.get(0)).unwrap();
+        assert_eq!(run_count, 0);
+
+        store.conn.execute_batch("DROP TRIGGER reject_task_run_started;").unwrap();
+        let run = store.start_task_run(&task.id, "Run prompt").unwrap();
+        store
+            .conn
+            .execute_batch(
+                "CREATE TRIGGER reject_task_run_finished
+                 BEFORE INSERT ON events
+                 WHEN NEW.event_type='task.run_finished'
+                 BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END;",
+            )
+            .unwrap();
+        assert!(store.finish_task_run(&run.id, true, Some("result"), None, None).is_err());
+        assert_eq!(store.get_task(&task.id).unwrap().unwrap().state, "running");
+        let status: String = store.conn.query_row("SELECT status FROM task_runs WHERE id=?1", [&run.id], |row| row.get(0)).unwrap();
+        assert_eq!(status, "running");
+    }
+
+    #[test]
     fn enforces_task_state_machine_and_records_transitions() {
         let store = Store::open(Path::new(":memory:")).unwrap();
         let task = store
@@ -667,11 +932,20 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, "3");
+        assert_eq!(version, "4");
         assert_eq!(
             store.get_task("legacy-task").unwrap().unwrap().title,
             "Old task"
         );
+        let task_run_table_exists: bool = store
+            .conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_runs')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(task_run_table_exists);
         store
             .grant_capability("filesystem.read", "Migration test")
             .unwrap();
