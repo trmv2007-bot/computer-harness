@@ -399,7 +399,10 @@ impl Store {
 
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         let key = validate_key(key, "setting key")?;
-        anyhow::ensure!(value.len() <= 4096, "setting value must be 4096 bytes or fewer");
+        anyhow::ensure!(
+            value.len() <= 4096,
+            "setting value must be 4096 bytes or fewer"
+        );
         let tx = self.conn.unchecked_transaction()?;
         tx.execute(
             "INSERT INTO app_settings(key,value,updated_at) VALUES(?1,?2,?3)
@@ -432,7 +435,10 @@ impl Store {
 
     pub fn record_audit_event(&self, event_type: &str, payload: &str) -> Result<()> {
         let event_type = validate_key(event_type, "event type")?;
-        anyhow::ensure!(payload.len() <= 4096, "audit payload must be 4096 bytes or fewer");
+        anyhow::ensure!(
+            payload.len() <= 4096,
+            "audit payload must be 4096 bytes or fewer"
+        );
         let tx = self.conn.unchecked_transaction()?;
         record_system_event_on(&tx, &event_type, payload)?;
         tx.commit()?;
@@ -624,7 +630,9 @@ mod tests {
         assert!(store
             .create_approval("filesystem.delete", "Migration test")
             .is_ok());
-        store.set_setting("workspace_root", "/tmp/workspace").unwrap();
+        store
+            .set_setting("workspace_root", "/tmp/workspace")
+            .unwrap();
         assert_eq!(
             store.get_setting("workspace_root").unwrap().as_deref(),
             Some("/tmp/workspace")
