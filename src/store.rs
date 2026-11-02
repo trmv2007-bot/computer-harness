@@ -84,9 +84,14 @@ impl Store {
                 consumed_at INTEGER NOT NULL,
                 FOREIGN KEY(approval_id) REFERENCES approvals(id)
              );
-             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','2');
-             UPDATE schema_meta SET value='2'
-                WHERE key='schema_version' AND CAST(value AS INTEGER)<2;
+             CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+             );
+             INSERT OR IGNORE INTO schema_meta(key,value) VALUES('schema_version','3');
+             UPDATE schema_meta SET value='3'
+                WHERE key='schema_version' AND CAST(value AS INTEGER)<3;
              COMMIT;",
         )
         .context("initialize database schema")?;
@@ -380,6 +385,60 @@ impl Store {
         Ok(changed == 1)
     }
 
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
+        let key = validate_key(key, "setting key")?;
+        self.conn
+            .query_row(
+                "SELECT value FROM app_settings WHERE key=?1",
+                [key],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("read application setting")
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        let key = validate_key(key, "setting key")?;
+        anyhow::ensure!(value.len() <= 4096, "setting value must be 4096 bytes or fewer");
+        let tx = self.conn.unchecked_transaction()?;
+        tx.execute(
+            "INSERT INTO app_settings(key,value,updated_at) VALUES(?1,?2,?3)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            params![key, value, now()],
+        )?;
+        record_system_event_on(
+            &tx,
+            "setting.updated",
+            &serde_json::json!({"key":key}).to_string(),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn remove_setting(&self, key: &str) -> Result<bool> {
+        let key = validate_key(key, "setting key")?;
+        let tx = self.conn.unchecked_transaction()?;
+        let changed = tx.execute("DELETE FROM app_settings WHERE key=?1", [key.as_str()])?;
+        if changed > 0 {
+            record_system_event_on(
+                &tx,
+                "setting.removed",
+                &serde_json::json!({"key":key}).to_string(),
+            )?;
+        }
+        tx.commit()?;
+        Ok(changed > 0)
+    }
+
+    pub fn record_audit_event(&self, event_type: &str, payload: &str) -> Result<()> {
+        let event_type = validate_key(event_type, "event type")?;
+        anyhow::ensure!(payload.len() <= 4096, "audit payload must be 4096 bytes or fewer");
+        let tx = self.conn.unchecked_transaction()?;
+        record_system_event_on(&tx, &event_type, payload)?;
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn event_count(&self) -> Result<i64> {
         Ok(self
             .conn
@@ -553,7 +612,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, "2");
+        assert_eq!(version, "3");
         assert_eq!(
             store.get_task("legacy-task").unwrap().unwrap().title,
             "Old task"
@@ -565,6 +624,11 @@ mod tests {
         assert!(store
             .create_approval("filesystem.delete", "Migration test")
             .is_ok());
+        store.set_setting("workspace_root", "/tmp/workspace").unwrap();
+        assert_eq!(
+            store.get_setting("workspace_root").unwrap().as_deref(),
+            Some("/tmp/workspace")
+        );
     }
 
     #[test]
@@ -601,6 +665,20 @@ mod tests {
             .create_approval("filesystem.delete", "must be audited")
             .is_err());
         assert!(store.list_approvals().unwrap().is_empty());
+    }
+
+    #[test]
+    fn setting_updates_are_audited_and_removable() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        assert_eq!(store.get_setting("workspace_root").unwrap(), None);
+        store.set_setting("workspace_root", "/workspace").unwrap();
+        assert_eq!(
+            store.get_setting("workspace_root").unwrap().as_deref(),
+            Some("/workspace")
+        );
+        assert!(store.remove_setting("workspace_root").unwrap());
+        assert!(!store.remove_setting("workspace_root").unwrap());
+        assert_eq!(store.event_count().unwrap(), 2);
     }
 
     #[test]
