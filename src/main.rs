@@ -91,8 +91,10 @@ enum Command {
         #[command(subcommand)]
         action: AgentCommand,
     },
-    /// Request an emergency stop of eligible Fairy work.
+    /// Stop active agent workers and block new agent requests until resumed.
     StopAll,
+    /// Clear the emergency stop latch and allow agent requests again.
+    Resume,
 }
 
 #[derive(Subcommand)]
@@ -284,6 +286,11 @@ async fn agent_ask(
     prompt: &str,
 ) -> Result<AgentOutcome> {
     const AGENT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+    let stop_marker = data_dir.join("STOP_ALL");
+    anyhow::ensure!(
+        !stop_marker.exists(),
+        "Fairy agent work is stopped; run 'fairy resume' before starting another agent request"
+    );
 
     anyhow::ensure!(
         prompt.len() <= 32 * 1024,
@@ -352,7 +359,25 @@ async fn agent_ask(
         let mut final_result: Option<String> = None;
         let mut final_error: Option<String> = None;
         let mut usage: Option<serde_json::Value> = None;
-        while let Some(line) = lines.next_line().await? {
+        let mut stop_poll = tokio::time::interval(Duration::from_millis(250));
+        stop_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            let line = tokio::select! {
+                line = lines.next_line() => line?,
+                _ = stop_poll.tick() => {
+                    if stop_marker.exists() {
+                        let _ = child.start_kill();
+                        let _ = child.wait().await;
+                        anyhow::bail!("Qoder worker cancelled by 'fairy stop-all'");
+                    }
+                    continue;
+                }
+            };
+            let Some(line) = line else {
+                break;
+            };
+
             let event: serde_json::Value =
                 serde_json::from_str(&line).context("Qoder worker emitted invalid JSON")?;
             match event["type"].as_str().unwrap_or_default() {
@@ -704,9 +729,18 @@ async fn main() -> Result<()> {
         }
         Command::StopAll => {
             let marker = data_dir.join("STOP_ALL");
-            fs::write(&marker, b"stop requested\n")?;
-            info!(path = %marker.display(), "emergency stop marker written");
-            println!("Stop request recorded. Active worker termination is unavailable until the worker supervisor is implemented.");
+            fs::write(&marker, format!("{}\n", uuid::Uuid::new_v4()))?;
+            info!(path = %marker.display(), "emergency stop latch enabled");
+            println!("Emergency stop enabled. Active Fairy Qoder workers will be terminated by their supervisors; new agent requests are blocked until 'fairy resume'.");
+        }
+        Command::Resume => {
+            let marker = data_dir.join("STOP_ALL");
+            if marker.exists() {
+                fs::remove_file(&marker)?;
+                println!("Fairy agent work resumed.");
+            } else {
+                println!("Fairy agent work was already enabled.");
+            }
         }
         Command::Serve => {
             ipc::serve(&data_dir, db_path).await?;
@@ -722,10 +756,6 @@ async fn main() -> Result<()> {
             }
         },
         Command::Run => {
-            let marker = data_dir.join("STOP_ALL");
-            if marker.exists() {
-                fs::remove_file(&marker)?;
-            }
             info!("Fairy foreground supervisor shell started; no agent workers are registered");
             tokio::select! {
                 signal = tokio::signal::ctrl_c() => {
