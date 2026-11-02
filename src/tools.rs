@@ -144,10 +144,12 @@ pub fn execute(
     info!(tool = descriptor.name, "tool execution started");
 
     let result = match descriptor.name {
-        "filesystem.list" => workspace_root(store)
-            .and_then(|root| list_directory(&root, input_json)),
-        "filesystem.read_text" => workspace_root(store)
-            .and_then(|root| read_text_file(&root, input_json)),
+        "filesystem.list" => {
+            workspace_root(store).and_then(|root| list_directory(&root, input_json))
+        }
+        "filesystem.read_text" => {
+            workspace_root(store).and_then(|root| read_text_file(&root, input_json))
+        }
         "desktop.list_windows" => {
             anyhow::ensure!(
                 input_json.trim() == "{}" || input_json.trim().is_empty(),
