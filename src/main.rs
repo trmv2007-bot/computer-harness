@@ -498,6 +498,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 TaskCommand::Inspect { id } => {
+                    let agent_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("agent");
                     let task = store
                         .get_task(&id)?
                         .with_context(|| format!("task not found: {id}"))?;
