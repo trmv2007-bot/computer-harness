@@ -1,4 +1,5 @@
 mod ipc;
+mod policy;
 mod store;
 
 use anyhow::Result;
@@ -41,6 +42,16 @@ enum Command {
         #[command(subcommand)]
         action: TaskCommand,
     },
+    /// Manage explicitly granted capabilities and evaluate tool policies.
+    Policy {
+        #[command(subcommand)]
+        action: PolicyCommand,
+    },
+    /// Create and resolve action-scoped approvals.
+    Approval {
+        #[command(subcommand)]
+        action: ApprovalCommand,
+    },
     /// Request an emergency stop of eligible Fairy work.
     StopAll,
 }
@@ -51,6 +62,37 @@ enum DaemonCommand {
     Status,
     /// Ask the local control plane to stop.
     Shutdown,
+}
+
+#[derive(Subcommand)]
+enum PolicyCommand {
+    /// List explicit capability grants.
+    List,
+    /// Grant one exact capability (wildcards are rejected).
+    Grant { capability: String, note: String },
+    /// Revoke one exact capability.
+    Revoke { capability: String },
+    /// Evaluate a capability/effect/action tuple; this does not execute a tool.
+    Check {
+        capability: String,
+        tool: String,
+        #[arg(value_enum)]
+        effect: policy::SideEffect,
+        #[arg(long)]
+        approval_id: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ApprovalCommand {
+    /// Request approval for one exact action.
+    Request { action: String, reason: String },
+    /// List pending and resolved approval requests.
+    List,
+    /// Approve a pending action-scoped request.
+    Approve { id: String },
+    /// Deny a pending action-scoped request.
+    Deny { id: String },
 }
 
 #[derive(Subcommand)]
@@ -192,6 +234,54 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Command::Policy { action } => match action {
+            PolicyCommand::List => print_json(&store.list_capabilities()?)?,
+            PolicyCommand::Grant { capability, note } => {
+                print_json(&store.grant_capability(&capability, &note)?)?;
+            }
+            PolicyCommand::Revoke { capability } => {
+                anyhow::ensure!(
+                    store.revoke_capability(&capability)?,
+                    "capability was not granted: {capability}"
+                );
+                println!("revoked {capability}");
+            }
+            PolicyCommand::Check {
+                capability,
+                tool,
+                effect,
+                approval_id,
+            } => {
+                let granted = store.has_capability(&capability)?;
+                let approved = match approval_id {
+                    Some(id) => store.approval_is_approved(&id, &tool)?,
+                    None => false,
+                };
+                let decision = policy::evaluate(granted, effect, approved);
+                print_json(&serde_json::json!({
+                    "capability": capability,
+                    "tool": tool,
+                    "effect": effect,
+                    "capability_granted": granted,
+                    "approval_valid": approved,
+                    "decision": decision
+                }))?;
+            }
+        },
+        Command::Approval { action } => match action {
+            ApprovalCommand::Request { action, reason } => {
+                print_json(&store.create_approval(&action, &reason)?)?;
+            }
+            ApprovalCommand::List => print_json(&store.list_approvals()?)?,
+            ApprovalCommand::Approve { id } => {
+                anyhow::ensure!(store.resolve_approval(&id, true)?, "approval not found or already resolved");
+                println!("approved {id}");
+            }
+            ApprovalCommand::Deny { id } => {
+                anyhow::ensure!(store.resolve_approval(&id, false)?, "approval not found or already resolved");
+                println!("denied {id}");
+            }
+        },
         Command::StopAll => {
             let marker = data_dir.join("STOP_ALL");
             fs::write(&marker, b"stop requested\n")?;
