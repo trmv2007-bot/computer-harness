@@ -1,3 +1,4 @@
+mod desktop;
 mod ipc;
 mod policy;
 mod service;
