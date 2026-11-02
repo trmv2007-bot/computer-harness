@@ -44,8 +44,8 @@ async function readInput() {
 
 async function createIpcClient() {
   const dataDir = requireEnv("FAIRY_DATA_DIR");
-  const endpoint = (await readFile(new URL("ipc-endpoint", `file:///${dataDir.replaceAll("\\", "/").replace(/^\/+/, "")}/`), "utf8")).trim();
-  const token = (await readFile(new URL("ipc-token", `file:///${dataDir.replaceAll("\\", "/").replace(/^\/+/, "")}/`), "utf8")).trim();
+  const endpoint = (await readFile(join(dataDir, "ipc-endpoint"), "utf8")).trim();
+  const token = (await readFile(join(dataDir, "ipc-token"), "utf8")).trim();
 
   const match = /^127\.0\.0\.1:(\d+)$/.exec(endpoint);
   if (!match) throw new Error("Fairy IPC endpoint is not a loopback IPv4 address");
