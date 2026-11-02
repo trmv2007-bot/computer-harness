@@ -132,26 +132,70 @@ async fn main() -> Result<()> {
             };
             print_json(&status)?;
         }
-        Command::Task { action } => match action {
-            TaskCommand::Create { title, objective } => {
-                let task = store.create_task(&title, &objective)?;
-                print_json(&task)?;
-            }
-            TaskCommand::List => print_json(&store.list_tasks()?)?,
-            TaskCommand::Show { id } => match store.get_task(&id)? {
-                Some(task) => print_json(&task)?,
-                None => anyhow::bail!("task not found: {id}"),
-            },
-            TaskCommand::Cancel { id } => {
-                if store.cancel_task(&id)? {
-                    println!("cancelled {id}");
-                } else {
-                    anyhow::bail!("task not found or no longer cancellable: {id}");
+        Command::Task { action } => {
+            let daemon_online = ipc::is_running(&data_dir).await;
+            match action {
+                TaskCommand::Create { title, objective } => {
+                    if daemon_online {
+                        let response = ipc::request(
+                            &data_dir,
+                            ipc::IpcCommand::CreateTask { title, objective },
+                        )
+                        .await?;
+                        print_json(&response.data)?;
+                    } else {
+                        print_json(&store.create_task(&title, &objective)?)?;
+                    }
                 }
-            }
-            TaskCommand::SetState { id, state } => {
-                let task = store.transition_task(&id, &state)?;
-                print_json(&task)?;
+                TaskCommand::List => {
+                    if daemon_online {
+                        let response = ipc::request(&data_dir, ipc::IpcCommand::ListTasks).await?;
+                        print_json(&response.data)?;
+                    } else {
+                        print_json(&store.list_tasks()?)?;
+                    }
+                }
+                TaskCommand::Show { id } => {
+                    if daemon_online {
+                        let response = ipc::request(
+                            &data_dir,
+                            ipc::IpcCommand::GetTask { id },
+                        )
+                        .await?;
+                        print_json(&response.data)?;
+                    } else {
+                        match store.get_task(&id)? {
+                            Some(task) => print_json(&task)?,
+                            None => anyhow::bail!("task not found: {id}"),
+                        }
+                    }
+                }
+                TaskCommand::Cancel { id } => {
+                    if daemon_online {
+                        let response = ipc::request(
+                            &data_dir,
+                            ipc::IpcCommand::CancelTask { id },
+                        )
+                        .await?;
+                        print_json(&response.data)?;
+                    } else if store.cancel_task(&id)? {
+                        println!("cancelled {id}");
+                    } else {
+                        anyhow::bail!("task not found or no longer cancellable: {id}");
+                    }
+                }
+                TaskCommand::SetState { id, state } => {
+                    if daemon_online {
+                        let response = ipc::request(
+                            &data_dir,
+                            ipc::IpcCommand::SetTaskState { id, state },
+                        )
+                        .await?;
+                        print_json(&response.data)?;
+                    } else {
+                        print_json(&store.transition_task(&id, &state)?)?;
+                    }
+                }
             }
         },
         Command::StopAll => {
