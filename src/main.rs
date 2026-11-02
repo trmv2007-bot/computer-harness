@@ -2,8 +2,8 @@ mod desktop;
 mod ipc;
 mod policy;
 mod service;
-mod store;
 mod stop;
+mod store;
 mod team;
 mod tools;
 
