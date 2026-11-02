@@ -182,7 +182,11 @@ async fn dispatch(
     match action {
         IpcCommand::Ping => Response::success("control plane is running", json!({"state":"running"})),
         IpcCommand::Shutdown => {
-            let _ = shutdown.send(true);
+            // Allow the response to leave the socket before the accept loop exits.
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                let _ = shutdown.send(true);
+            });
             Response::success("shutdown requested", json!({"state":"stopping"}))
         }
         action => {
