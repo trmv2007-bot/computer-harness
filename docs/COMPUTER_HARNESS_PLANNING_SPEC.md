@@ -1,14 +1,14 @@
 # Computer Harness — Planning Specification
 
-**Status:** Planning baseline; implementation has not been authorized.  
-**Version:** 0.1 (planning draft)  
+**Status:** Implementation authorized; initial Fairy prototype under review.  
+**Version:** 0.2 (planning baseline with implementation tracking)  
 **Owner:** TRMV123  
-**Last updated:** 2026-11-01  
+**Last updated:** 2026-11-02  
 **Primary interface:** CLI first  
 **Project identity:** Computer Harness  
 **Primary companion/persona:** Fairy (Fairy × JARVIS)
 
-> This document is the source of truth for the decisions and requirements agreed during planning. It is intentionally a specification, not an implementation. Do not treat an unverified proposal as an approved technology choice. Do not begin implementation until the owner explicitly says **START THE BUILD**.
+> This document remains the source of truth for agreed product decisions and requirements. The owner supplied **START THE BUILD** on 2026-11-02. Implementation may proceed on review branches, but unverified proposals are not approved technology choices and a prototype does not close platform or release acceptance gates.
 
 ## 1. Product vision
 
@@ -683,7 +683,7 @@ Do not invent answers. Research, document trade-offs and ask the owner only when
 
 ## 24. Authorization gate
 
-**Planning and documentation may continue. Product implementation may not begin until the owner explicitly says:**
+**Authorization status: GRANTED.** The owner explicitly supplied the required phrase on 2026-11-02. This authorization permits implementation to begin; it does not waive the safety, cost, platform, testing or approval requirements in this specification.
 
 ```text
 START THE BUILD
