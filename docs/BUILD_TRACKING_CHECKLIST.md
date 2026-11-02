@@ -2,7 +2,7 @@
 
 This document is the execution companion to [the planning specification](./COMPUTER_HARNESS_PLANNING_SPEC.md).
 
-**Current status: PARTIAL — early core prototype; all release gates remain open.**  
+**Current status: PARTIAL — early core prototype; all release gates remain open.**\n\nLatest evidence: commit `95994a8fefc449b1b21389c989d980460a22f4d3` passed Windows and Ubuntu CI (fmt, Clippy, tests, release build). New IPC/control-plane work is awaiting a fresh CI result.  
 **Implementation authorization phrase:** `START THE BUILD`
 
 ## Rules for the eventual build
@@ -34,7 +34,7 @@ This document is the execution companion to [the planning specification](./COMPU
 
 ### Gate 1 — Persistent CLI core
 - [ ] CLI lifecycle and structured command output.
-- [ ] Persistent background runtime and reconnecting sessions.
+- [ ] Persistent background runtime and reconnecting sessions (foreground loopback control-plane prototype exists; OS-managed service and reconnecting client remain open).
 - [ ] Durable task/event store, checkpoints and recovery.
 - [ ] Diagnostics, logs, configuration and migrations.
 - [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness for the persistent core.
