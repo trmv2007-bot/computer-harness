@@ -41,13 +41,8 @@ mod windows {
 
         let title_capacity = (reported_title_len as usize).min(MAX_TITLE_CHARS);
         let mut title_buffer = vec![0u16; title_capacity + 1];
-        let title_len = unsafe {
-            GetWindowTextW(
-                hwnd,
-                title_buffer.as_mut_ptr(),
-                title_buffer.len() as i32,
-            )
-        };
+        let title_len =
+            unsafe { GetWindowTextW(hwnd, title_buffer.as_mut_ptr(), title_buffer.len() as i32) };
         if title_len <= 0 {
             return 1;
         }
@@ -57,13 +52,8 @@ mod windows {
         }
 
         let mut class_buffer = vec![0u16; MAX_CLASS_CHARS + 1];
-        let class_len = unsafe {
-            GetClassNameW(
-                hwnd,
-                class_buffer.as_mut_ptr(),
-                class_buffer.len() as i32,
-            )
-        };
+        let class_len =
+            unsafe { GetClassNameW(hwnd, class_buffer.as_mut_ptr(), class_buffer.len() as i32) };
         let class_name = if class_len > 0 {
             String::from_utf16_lossy(&class_buffer[..class_len as usize])
         } else {
@@ -124,7 +114,6 @@ pub fn list_windows() -> Result<Value> {
     anyhow::bail!("desktop window enumeration is available only on Windows")
 }
 
-
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -134,7 +123,10 @@ mod tests {
         let snapshot = list_windows().unwrap();
         assert_eq!(snapshot["platform"], "windows");
         let windows = snapshot["windows"].as_array().unwrap();
-        assert_eq!(snapshot["window_count"].as_u64().unwrap() as usize, windows.len());
+        assert_eq!(
+            snapshot["window_count"].as_u64().unwrap() as usize,
+            windows.len()
+        );
         assert!(windows.len() <= MAX_VISIBLE_WINDOWS);
         for window in windows {
             assert!(window["title"].is_string());
