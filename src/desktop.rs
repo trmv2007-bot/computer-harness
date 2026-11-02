@@ -123,3 +123,23 @@ pub fn list_windows() -> Result<Value> {
 pub fn list_windows() -> Result<Value> {
     anyhow::bail!("desktop window enumeration is available only on Windows")
 }
+
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enumerates_bounded_visible_windows_with_expected_schema() {
+        let snapshot = list_windows().unwrap();
+        assert_eq!(snapshot["platform"], "windows");
+        let windows = snapshot["windows"].as_array().unwrap();
+        assert_eq!(snapshot["window_count"].as_u64().unwrap() as usize, windows.len());
+        assert!(windows.len() <= MAX_VISIBLE_WINDOWS);
+        for window in windows {
+            assert!(window["title"].is_string());
+            assert!(window["class_name"].is_string());
+            assert!(window["process_id"].is_number());
+        }
+    }
+}
