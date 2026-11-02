@@ -14,6 +14,7 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 - Task create/state/cancel and task execution lifecycle changes are committed atomically with their audit events; execution results and usage snapshots persist across CLI sessions.
 - Central policy evaluator: exact capability grants required; destructive/admin/external operations require scoped approval; paid and financial actions are denied by the default zero-spend rule.
 - Initial read-only workspace tools: `filesystem.list` and `filesystem.read_text`. Both require `filesystem.read`, use cap-std directory handles to constrain access to the configured workspace, reject parent/absolute paths and external symlink escapes, enforce input/output bounds, block common credential paths and append audit events.
+- Built-in specialist team: Fairy Coordinator, Engineer, Researcher, Operator, Auditor and Archivist. Each profile loads integrated skill playbooks, role-specific operating rules and an explicit current capability boundary into the Qoder system prompt. Task inspections use the Auditor profile by default.
 - Optional Qoder Agent SDK worker (`agent/`), pinned dependencies, custom MCP tools routed through Fairy's IPC gateway, strict success/error result propagation, usage/quota reporting, and CLI setup/ask commands. It uses the local signed-in Qoder CLI session; it does not assume unlimited/free inference.
 - Automated CI: Rust formatting, Clippy, tests and release builds on Windows/Ubuntu; Node worker syntax/manifest validation.
 
@@ -37,7 +38,10 @@ cargo run -- doctor
 cargo run -- workspace set "C:/path/to/your/project"
 cargo run -- policy grant filesystem.read "Owner approved workspace read access"
 cargo run -- tool list
+cargo run -- team list
+cargo run -- team show engineer
 cargo run -- agent setup
+cargo run -- agent ask --role engineer "Review the configured workspace architecture."
 cargo run -- task create "Inspect project" "Review the project structure and identify risks"
 
 # Either run in the foreground:
@@ -69,6 +73,6 @@ The service manager is implemented for Windows Task Scheduler and Linux systemd 
 
 ## Not implemented
 
-Crash recovery for interrupted worker attempts; automatic task scheduling; multi-task concurrency, leases and checkpoints; provider/model routing and quota-aware pause/resume; Qoder account authentication/usage verification on owner device; write-capable tools; process sandboxing and comprehensive secret redaction; Windows/Linux desktop and browser control; Android adapter; vision/research pipeline; durable hybrid memory; skill engine; secure federation/pairing; notifications; Gaming Mode/resource governor; proactive monitoring; self-improvement; dashboard; installer/updater.
+Crash recovery for interrupted worker attempts; automatic task scheduling; multi-task concurrency, leases and checkpoints; provider/model routing and quota-aware pause/resume; Qoder account authentication/usage verification on owner device; write-capable tools; process sandboxing and comprehensive secret redaction; Windows/Linux desktop and browser control; Android adapter; vision/research pipeline; durable hybrid memory; versioned/learned skill engine and skill validation; secure federation/pairing; notifications; Gaming Mode/resource governor; proactive monitoring; self-improvement; dashboard; installer/updater.
 
 No hosted inference service is assumed to be unlimited or zero-cost. Paid fallback is disabled. Workspace filesystem access is rooted in cap-std directory capabilities; common credential paths are denied. This does not sandbox the entire Fairy process or protect against an already-compromised same-user process.
