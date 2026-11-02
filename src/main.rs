@@ -1,17 +1,16 @@
+mod store;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use serde::Serialize;
 use std::{fs, path::PathBuf, time::Duration};
+use store::Store;
 use tracing::{info, Level};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(
-    name = "fairy",
-    version,
-    about = "Computer Harness — Fairy runtime CLI"
-)]
+#[command(name = "fairy", version, about = "Computer Harness — Fairy runtime CLI")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -19,12 +18,31 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Show runtime paths and local diagnostics.
+    /// Show local paths, database health and capability readiness.
     Doctor,
     /// Print machine-readable runtime information.
     Status,
-    /// Run the foreground runtime supervisor.
+    /// Run the foreground supervisor shell.
     Run,
+    /// Manage durable objectives.
+    Task {
+        #[command(subcommand)]
+        action: TaskCommand,
+    },
+    /// Request an emergency stop of eligible Fairy work.
+    StopAll,
+}
+
+#[derive(Subcommand)]
+enum TaskCommand {
+    /// Create a durable queued task.
+    Create { title: String, objective: String },
+    /// List tasks, newest first.
+    List,
+    /// Show a task by its identifier.
+    Show { id: String },
+    /// Cancel a queued/running/paused task.
+    Cancel { id: String },
 }
 
 #[derive(Serialize)]
@@ -33,6 +51,11 @@ struct Status {
     state: &'static str,
     data_dir: PathBuf,
     config_dir: PathBuf,
+    database: &'static str,
+    task_count: usize,
+    event_count: i64,
+    model_provider: &'static str,
+    computer_control: &'static str,
 }
 
 fn paths() -> Result<(PathBuf, PathBuf)> {
@@ -45,45 +68,85 @@ fn paths() -> Result<(PathBuf, PathBuf)> {
     Ok((data, config))
 }
 
+fn print_json<T: Serialize>(value: &T) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
+    Ok(())
+}
+
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
         .init();
 
     let cli = Cli::parse();
     let (data_dir, config_dir) = paths()?;
+    let db_path = data_dir.join("fairy.sqlite3");
+    let store = Store::open(&db_path)?;
 
     match cli.command {
         Command::Doctor => {
-            println!("Fairy local diagnostics");
+            println!("Fairy diagnostics");
             println!("data_dir={}", data_dir.display());
             println!("config_dir={}", config_dir.display());
-            println!("runtime=not_started");
-            println!("provider_authentication=not_tested");
-            println!("platform_adapter=not_implemented");
+            println!("database=ok ({})", db_path.display());
+            println!("task_count={}", store.list_tasks()?.len());
+            println!("provider_authentication=not_configured");
+            println!("computer_control=not_implemented");
+            println!("persistent_service=not_implemented");
         }
         Command::Status => {
             let status = Status {
                 version: env!("CARGO_PKG_VERSION"),
-                state: "cli_ready_runtime_not_started",
+                state: "local_cli_and_task_store_ready",
                 data_dir,
                 config_dir,
+                database: "ok",
+                task_count: store.list_tasks()?.len(),
+                event_count: store.event_count()?,
+                model_provider: "not_configured",
+                computer_control: "not_implemented",
             };
-            println!("{}", serde_json::to_string_pretty(&status)?);
+            print_json(&status)?;
+        }
+        Command::Task { action } => match action {
+            TaskCommand::Create { title, objective } => {
+                let task = store.create_task(&title, &objective)?;
+                print_json(&task)?;
+            }
+            TaskCommand::List => print_json(&store.list_tasks()?)?,
+            TaskCommand::Show { id } => match store.get_task(&id)? {
+                Some(task) => print_json(&task)?,
+                None => anyhow::bail!("task not found: {id}"),
+            },
+            TaskCommand::Cancel { id } => {
+                if store.cancel_task(&id)? {
+                    println!("cancelled {id}");
+                } else {
+                    anyhow::bail!("task not found or no longer cancellable: {id}");
+                }
+            }
+        },
+        Command::StopAll => {
+            let marker = data_dir.join("STOP_ALL");
+            fs::write(&marker, b"stop requested\n")?;
+            info!(path = %marker.display(), "emergency stop marker written");
+            println!("Stop request recorded. Active worker termination is unavailable until the worker supervisor is implemented.");
         }
         Command::Run => {
-            info!("Fairy supervisor started; no computer-control tools are registered yet");
+            let marker = data_dir.join("STOP_ALL");
+            if marker.exists() {
+                fs::remove_file(&marker)?;
+            }
+            info!("Fairy foreground supervisor shell started; no agent workers are registered");
             tokio::select! {
                 signal = tokio::signal::ctrl_c() => {
                     signal?;
                     info!("shutdown signal received");
                 }
                 _ = tokio::time::sleep(Duration::from_secs(24 * 60 * 60)) => {
-                    info!("supervisor heartbeat interval elapsed; exiting cleanly");
+                    info!("supervisor interval elapsed; exiting cleanly");
                 }
             }
         }
