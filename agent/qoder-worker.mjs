@@ -155,7 +155,7 @@ async function main() {
     tools: [listTool, readTextTool],
   });
 
-  const agent = query({
+  const q = query({
     prompt: input.prompt,
     options: {
       auth: qodercliAuth(),
@@ -167,7 +167,10 @@ async function main() {
         "The available tools are read-only and restricted to the configured workspace. You cannot edit files, run shell commands, browse the web, or contact external services.",
         "Do not request secrets. Do not infer that Qoder inference is unlimited or free; report quota information only when the SDK supplies it.",
       ].join("\n"),
-      tools: [],
+      tools: [
+        "mcp__fairy__filesystem_list",
+        "mcp__fairy__filesystem_read_text",
+      ],
       allowedTools: [
         "mcp__fairy__filesystem_list",
         "mcp__fairy__filesystem_read_text",
@@ -180,7 +183,7 @@ async function main() {
   });
 
   try {
-    for await (const message of agent) {
+    for await (const message of q) {
       if (message.type === "assistant") {
         for (const block of message.message.content) {
           if (block.type === "text") emit("text", { text: block.text });
@@ -194,7 +197,7 @@ async function main() {
       }
     }
 
-    const usage = await agent.getUsageInfo().catch(() => null);
+    const usage = await q.getUsageInfo().catch(() => null);
     if (usage) {
       emit("usage", {
         userType: usage.userType,
@@ -214,7 +217,7 @@ async function main() {
       emit("usage", { available: false });
     }
   } finally {
-    await agent.close().catch(() => {});
+    await q.close().catch(() => {});
     await shutdownDaemon().catch(() => {});
   }
 }
