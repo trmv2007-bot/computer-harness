@@ -197,7 +197,7 @@ pub async fn request(data_dir: &Path, action: IpcCommand) -> Result<Response> {
         "Fairy control plane closed the connection without a response"
     );
     anyhow::ensure!(
-        read <= (MAX_RESPONSE_BYTES + 1) as usize && line.ends_with('\n'),
+        read <= (MAX_RESPONSE_BYTES + 1) && line.ends_with('\n'),
         "Fairy control plane response exceeds the 8 MiB limit or is incomplete"
     );
     let response: Response =
