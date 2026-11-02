@@ -215,10 +215,6 @@ impl Store {
         Ok(changed > 0)
     }
 
-    pub fn record_event(&self, task_id: &str, kind: &str, payload: &str) -> Result<()> {
-        record_task_event_on(&self.conn, task_id, kind, payload)
-    }
-
     pub fn grant_capability(&self, capability: &str, note: &str) -> Result<CapabilityGrant> {
         let capability = validate_key(capability, "capability")?;
         let note = note.trim();
