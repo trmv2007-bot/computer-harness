@@ -3,6 +3,7 @@ mod ipc;
 mod policy;
 mod service;
 mod store;
+mod team;
 mod tools;
 
 use anyhow::{Context, Result};
@@ -80,6 +81,11 @@ enum Command {
         #[command(subcommand)]
         action: ServiceCommand,
     },
+    /// Inspect the built-in specialist team and skill playbooks.
+    Team {
+        #[command(subcommand)]
+        action: TeamCommand,
+    },
     /// Run the optional Qoder Agent SDK worker.
     Agent {
         #[command(subcommand)]
@@ -107,8 +113,23 @@ enum ServiceCommand {
 enum AgentCommand {
     /// Install the pinned Qoder Agent SDK worker dependencies.
     Setup,
-    /// Ask Fairy to inspect the configured workspace using the signed-in Qoder account.
-    Ask { prompt: String },
+    /// Ask a selected Fairy specialist using the signed-in Qoder account.
+    Ask {
+        prompt: String,
+        #[arg(long, value_enum, default_value = "fairy")]
+        role: team::Role,
+    },
+}
+
+#[derive(Subcommand)]
+enum TeamCommand {
+    /// List built-in specialists and their focus areas.
+    List,
+    /// Show one specialist's mission, skill playbooks and current tool limits.
+    Show {
+        #[arg(value_enum)]
+        role: team::Role,
+    },
 }
 
 #[derive(Subcommand)]
@@ -259,6 +280,7 @@ async fn agent_ask(
     agent_dir: &Path,
     data_dir: &Path,
     store: &Store,
+    profile: &team::AgentProfile,
     prompt: &str,
 ) -> Result<AgentOutcome> {
     const AGENT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
@@ -310,7 +332,10 @@ async fn agent_ask(
         .context("start Node.js Qoder worker; verify Node.js 18+ is on PATH")?;
 
     let execution = tokio::time::timeout(AGENT_TIMEOUT, async {
-        let payload = serde_json::to_vec(&serde_json::json!({"prompt":prompt}))?;
+        let payload = serde_json::to_vec(&serde_json::json!({
+            "prompt":prompt,
+            "profile":profile
+        }))?;
         let mut stdin = child
             .stdin
             .take()
@@ -508,7 +533,7 @@ async fn main() -> Result<()> {
                         task.title, task.objective
                     );
                     let run = store.start_task_run(&id, &prompt)?;
-                    match agent_ask(&agent_dir, &data_dir, &store, &prompt).await {
+                    match agent_ask(&agent_dir, &data_dir, &store, &team::Role::Auditor.profile(), &prompt).await {
                         Ok(outcome) => {
                             let finished = store.finish_task_run(
                                 &run.id,
@@ -653,12 +678,18 @@ async fn main() -> Result<()> {
             ServiceCommand::Stop => println!("{}", service::stop(&data_dir).await?),
             ServiceCommand::Status => print_json(&service::status(&data_dir).await?)?,
         },
+        Command::Team { action } => match action {
+            TeamCommand::List => print_json(&team::list_profiles())?,
+            TeamCommand::Show { role } => print_json(&role.profile())?,
+        },
         Command::Agent { action } => {
             let agent_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("agent");
             match action {
                 AgentCommand::Setup => agent_setup(&agent_dir).await?,
-                AgentCommand::Ask { prompt } => {
-                    let _outcome = agent_ask(&agent_dir, &data_dir, &store, &prompt).await?;
+                AgentCommand::Ask { prompt, role } => {
+                    let profile = role.profile();
+                    eprintln!("Fairy specialist: {} ({})", profile.title, profile.id);
+                    let _outcome = agent_ask(&agent_dir, &data_dir, &store, &profile, &prompt).await?;
                 }
             }
         }
