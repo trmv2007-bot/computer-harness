@@ -31,7 +31,7 @@ pub struct ToolDescriptor {
 }
 
 fn registry() -> Vec<ToolDescriptor> {
-    vec![
+    let mut tools = vec![
         ToolDescriptor {
             name: "filesystem.list",
             version: "1",
@@ -61,7 +61,23 @@ fn registry() -> Vec<ToolDescriptor> {
                 "additionalProperties": false
             }),
         },
-    ]
+    ];
+
+    #[cfg(windows)]
+    tools.push(ToolDescriptor {
+        name: "desktop.list_windows",
+        version: "1",
+        description: "List up to 200 visible top-level Windows desktop windows with title, class and process ID. Read-only; window titles may contain private information.",
+        required_capability: "desktop.observe",
+        side_effect: SideEffect::ReadOnly,
+        input_schema: json!({
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }),
+    });
+
+    tools
 }
 
 pub fn list_tools() -> Vec<ToolDescriptor> {
@@ -120,16 +136,25 @@ pub fn execute(
         );
     }
 
-    let root = workspace_root(store)?;
+    let workspace_scoped = descriptor.name.starts_with("filesystem.");
     store.record_audit_event(
         "tool.execution_started",
-        &json!({"tool":descriptor.name,"workspace_configured":true}).to_string(),
+        &json!({"tool":descriptor.name,"workspace_scoped":workspace_scoped}).to_string(),
     )?;
     info!(tool = descriptor.name, "tool execution started");
 
     let result = match descriptor.name {
-        "filesystem.list" => list_directory(&root, input_json),
-        "filesystem.read_text" => read_text_file(&root, input_json),
+        "filesystem.list" => workspace_root(store)
+            .and_then(|root| list_directory(&root, input_json)),
+        "filesystem.read_text" => workspace_root(store)
+            .and_then(|root| read_text_file(&root, input_json)),
+        "desktop.list_windows" => {
+            anyhow::ensure!(
+                input_json.trim() == "{}" || input_json.trim().is_empty(),
+                "desktop.list_windows does not accept input properties"
+            );
+            crate::desktop::list_windows()
+        }
         _ => anyhow::bail!("tool registry entry has no executor: {}", descriptor.name),
     };
 
@@ -344,12 +369,22 @@ mod tests {
     #[test]
     fn registry_is_typed_and_contains_only_bounded_read_tools() {
         let tools = list_tools();
-        assert_eq!(tools.len(), 2);
         assert!(tools
             .iter()
             .all(|tool| tool.side_effect == SideEffect::ReadOnly));
         assert!(tools.iter().any(|tool| tool.name == "filesystem.list"));
         assert!(tools.iter().any(|tool| tool.name == "filesystem.read_text"));
+        #[cfg(windows)]
+        {
+            assert_eq!(tools.len(), 3);
+            let desktop = tools
+                .iter()
+                .find(|tool| tool.name == "desktop.list_windows")
+                .unwrap();
+            assert_eq!(desktop.required_capability, "desktop.observe");
+        }
+        #[cfg(not(windows))]
+        assert_eq!(tools.len(), 2);
     }
 
     #[test]
