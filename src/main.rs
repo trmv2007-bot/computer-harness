@@ -48,10 +48,7 @@ enum TaskCommand {
     /// Cancel a queued/running/paused task.
     Cancel { id: String },
     /// Move a task through a validated lifecycle transition.
-    SetState {
-        id: String,
-        state: String,
-    },
+    SetState { id: String, state: String },
 }
 
 #[derive(Serialize)]
