@@ -187,7 +187,7 @@ pub async fn request(data_dir: &Path, action: IpcCommand) -> Result<Response> {
     let read = timeout(
         Duration::from_secs(3),
         BufReader::new(stream)
-            .take(MAX_REQUEST_BYTES as u64)
+            .take((MAX_RESPONSE_BYTES + 1) as u64)
             .read_line(&mut line),
     )
     .await
@@ -195,6 +195,10 @@ pub async fn request(data_dir: &Path, action: IpcCommand) -> Result<Response> {
     anyhow::ensure!(
         read > 0,
         "Fairy control plane closed the connection without a response"
+    );
+    anyhow::ensure!(
+        read <= (MAX_RESPONSE_BYTES + 1) as usize && line.ends_with('\n'),
+        "Fairy control plane response exceeds the 8 MiB limit or is incomplete"
     );
     let response: Response =
         serde_json::from_str(&line).context("invalid control plane response")?;
