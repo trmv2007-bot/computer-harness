@@ -12,50 +12,59 @@ const WINDOWS_TASK: &str = "ComputerHarnessFairy";
 const LINUX_UNIT: &str = "fairy.service";
 
 pub async fn install(_data_dir: &Path) -> Result<String> {
-    let executable = std::env::current_exe()
-        .context("locate the Fairy executable")?
-        .canonicalize()
-        .context("resolve the Fairy executable path")?;
-
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
-        let task_command = format!("\"{}\" serve", executable.display());
-        let status = Command::new("schtasks")
-            .args(["/Create", "/TN", WINDOWS_TASK, "/SC", "ONLOGON", "/RL", "LIMITED", "/TR"])
-            .arg(task_command)
-            .arg("/F")
-            .status()
-            .await
-            .context("start Windows Task Scheduler command")?;
-        anyhow::ensure!(status.success(), "could not register Fairy at user logon: {status}");
-        return Ok(format!("Installed user logon task '{WINDOWS_TASK}'."));
-    }
+        let executable = std::env::current_exe()
+            .context("locate the Fairy executable")?
+            .canonicalize()
+            .context("resolve the Fairy executable path")?;
 
-    #[cfg(target_os = "linux")]
-    {
-        let unit_path = linux_unit_path()?;
-        let parent = unit_path.parent().context("resolve systemd user unit directory")?;
-        fs::create_dir_all(parent)?;
-        let contents = linux_unit_contents(&executable)?;
-        let temporary = unit_path.with_extension("service.tmp");
-        fs::write(&temporary, contents).context("write temporary systemd user unit")?;
-        fs::rename(&temporary, &unit_path).context("publish systemd user unit")?;
-        systemctl(&["daemon-reload"]).await?;
-        systemctl(&["enable", "--now", LINUX_UNIT]).await?;
-        return Ok(format!("Installed and enabled '{LINUX_UNIT}' at {}", unit_path.display()));
+        #[cfg(windows)]
+        {
+            let task_command = format!("\"{}\" serve", executable.display());
+            let status = Command::new("schtasks")
+                .args(["/Create", "/TN", WINDOWS_TASK, "/SC", "ONLOGON", "/RL", "LIMITED", "/TR"])
+                .arg(task_command)
+                .arg("/F")
+                .status()
+                .await
+                .context("start Windows Task Scheduler command")?;
+            anyhow::ensure!(status.success(), "could not register Fairy at user logon: {status}");
+            return Ok(format!("Installed user logon task '{WINDOWS_TASK}'."));
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let unit_path = linux_unit_path()?;
+            let parent = unit_path.parent().context("resolve systemd user unit directory")?;
+            fs::create_dir_all(parent)?;
+            let contents = linux_unit_contents(&executable)?;
+            let temporary = unit_path.with_extension("service.tmp");
+            fs::write(&temporary, contents).context("write temporary systemd user unit")?;
+            fs::rename(&temporary, &unit_path).context("publish systemd user unit")?;
+            systemctl(&["daemon-reload"]).await?;
+            if let Err(error) = systemctl(&["enable", "--now", LINUX_UNIT]).await {
+                let _ = fs::remove_file(&unit_path);
+                let _ = systemctl(&["daemon-reload"]).await;
+                return Err(error).context("enable Fairy's systemd user service");
+            }
+            return Ok(format!("Installed and enabled '{LINUX_UNIT}' at {}", unit_path.display()));
+        }
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        let _ = executable;
+        let _ = _data_dir;
         anyhow::bail!("automatic service installation is currently supported on Windows and Linux only");
     }
 }
 
-pub async fn uninstall(data_dir: &Path) -> Result<String> {
-    let _ = data_dir;
+pub async fn uninstall(_data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
+        if crate::ipc::is_running(_data_dir).await {
+            crate::ipc::request(_data_dir, crate::ipc::IpcCommand::Shutdown).await?;
+        }
         let status = Command::new("schtasks")
             .args(["/Delete", "/TN", WINDOWS_TASK, "/F"])
             .status()
@@ -68,26 +77,25 @@ pub async fn uninstall(data_dir: &Path) -> Result<String> {
     #[cfg(target_os = "linux")]
     {
         let unit_path = linux_unit_path()?;
-        // Stop/disable first; even if it is already stopped, removal should proceed.
-        let _ = systemctl(&["disable", "--now", LINUX_UNIT]).await;
         if unit_path.exists() {
+            systemctl(&["disable", "--now", LINUX_UNIT]).await?;
             fs::remove_file(&unit_path).context("remove systemd user unit")?;
+            systemctl(&["daemon-reload"]).await?;
+            return Ok(format!("Removed '{LINUX_UNIT}'. Existing task data was preserved."));
         }
-        systemctl(&["daemon-reload"]).await?;
-        return Ok(format!("Removed '{LINUX_UNIT}'. Existing task data was preserved."));
+        return Ok(format!("'{LINUX_UNIT}' is not installed; task data was preserved."));
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        let _ = data_dir;
+        let _ = _data_dir;
         anyhow::bail!("automatic service management is currently supported on Windows and Linux only");
     }
 }
 
-pub async fn start(data_dir: &Path) -> Result<String> {
+pub async fn start(_data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
-        let _ = data_dir;
         let status = Command::new("schtasks")
             .args(["/Run", "/TN", WINDOWS_TASK])
             .status()
@@ -99,14 +107,13 @@ pub async fn start(data_dir: &Path) -> Result<String> {
 
     #[cfg(target_os = "linux")]
     {
-        let _ = data_dir;
         systemctl(&["start", LINUX_UNIT]).await?;
         return Ok("Fairy start requested through systemd.".to_owned());
     }
 
     #[cfg(not(any(windows, target_os = "linux")))]
     {
-        let _ = data_dir;
+        let _ = _data_dir;
         anyhow::bail!("automatic service management is currently supported on Windows and Linux only");
     }
 }
@@ -161,11 +168,16 @@ pub async fn status(data_dir: &Path) -> Result<Value> {
             .output()
             .await
             .context("query systemd user service")?;
+        let manager_state = if output.stdout.is_empty() {
+            String::from_utf8_lossy(&output.stderr).trim().to_owned()
+        } else {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
         return Ok(json!({
             "manager": "systemd_user",
             "installed": unit_path.is_file(),
             "running": running,
-            "manager_state": String::from_utf8_lossy(&output.stdout).trim(),
+            "manager_state": manager_state,
             "unit_path": unit_path
         }));
     }
@@ -205,7 +217,7 @@ fn linux_unit_contents(executable: &Path) -> Result<String> {
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('%', "%%")
-        .replace('
+        .replace('$', "$$");
     Ok(format!(
         "[Unit]\nDescription=Computer Harness Fairy Runtime\nAfter=default.target\n\n[Service]\nType=simple\nExecStart=\"{escaped}\" serve\nRestart=on-failure\nRestartSec=3\nKillSignal=SIGINT\nTimeoutStopSec=15\nUMask=0077\n\n[Install]\nWantedBy=default.target\n"
     ))
@@ -240,46 +252,7 @@ mod tests {
     fn systemd_unit_escapes_specifiers_and_rejects_newlines() {
         let path = Path::new("/home/test/100%/$fairy");
         let unit = linux_unit_contents(path).unwrap();
-        assert!(unit.contains("100%%/$fairy"));
-        assert!(linux_unit_contents(Path::new("/tmp/fairy\nservice")).is_err());
-    }
-}
-, "$");
-    Ok(format!(
-        "[Unit]\nDescription=Computer Harness Fairy Runtime\nAfter=default.target\n\n[Service]\nType=simple\nExecStart=\"{escaped}\" serve\nRestart=on-failure\nRestartSec=3\nKillSignal=SIGINT\nTimeoutStopSec=15\nUMask=0077\n\n[Install]\nWantedBy=default.target\n"
-    ))
-}
-
-#[cfg(target_os = "linux")]
-async fn systemctl(args: &[&str]) -> Result<()> {
-    let status = Command::new("systemctl")
-        .arg("--user")
-        .args(args)
-        .status()
-        .await
-        .context("start systemctl --user")?;
-    anyhow::ensure!(status.success(), "systemctl --user {:?} failed: {status}", args);
-    Ok(())
-}
-
-#[cfg(all(test, target_os = "linux"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn systemd_unit_quotes_paths_and_enables_restart() {
-        let path = Path::new("/home/test/Fairy Runtime/bin/fairy");
-        let unit = linux_unit_contents(path).unwrap();
-        assert!(unit.contains("ExecStart=\"/home/test/Fairy Runtime/bin/fairy\" serve"));
-        assert!(unit.contains("Restart=on-failure"));
-        assert!(unit.contains("UMask=0077"));
-    }
-
-    #[test]
-    fn systemd_unit_escapes_specifiers_and_rejects_newlines() {
-        let path = Path::new("/home/test/100%/$fairy");
-        let unit = linux_unit_contents(path).unwrap();
-        assert!(unit.contains("100%%/\\$fairy"));
+        assert!(unit.contains("100%%/$$fairy"));
         assert!(linux_unit_contents(Path::new("/tmp/fairy\nservice")).is_err());
     }
 }
