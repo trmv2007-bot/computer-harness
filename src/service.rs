@@ -12,7 +12,7 @@ const WINDOWS_TASK: &str = "ComputerHarnessFairy";
 const LINUX_UNIT: &str = "fairy.service";
 
 /// Install an opt-in, per-user startup entry. No installation happens implicitly.
-pub async fn install(data_dir: &Path) -> Result<String> {
+pub async fn install(_data_dir: &Path) -> Result<String> {
     #[cfg(windows)]
     {
         let executable = std::env::current_exe()
