@@ -113,10 +113,14 @@ impl Role {
             mission: mission.to_owned(),
             current_scope: current_scope.to_owned(),
             skills,
-            operating_rules: operating_rules.iter().map(|rule| (*rule).to_owned()).collect(),
+            operating_rules: operating_rules
+                .iter()
+                .map(|rule| (*rule).to_owned())
+                .collect(),
             tool_scope: vec![
                 "filesystem.list — read-only listing within the configured workspace".to_owned(),
-                "filesystem.read_text — read-only UTF-8 text reads within the configured workspace".to_owned(),
+                "filesystem.read_text — read-only UTF-8 text reads within the configured workspace"
+                    .to_owned(),
             ],
         }
     }
@@ -215,7 +219,14 @@ mod tests {
         let ids: Vec<_> = profiles.iter().map(|profile| profile.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["fairy", "engineer", "researcher", "operator", "auditor", "archivist"]
+            [
+                "fairy",
+                "engineer",
+                "researcher",
+                "operator",
+                "auditor",
+                "archivist"
+            ]
         );
 
         for profile in profiles {
@@ -224,7 +235,10 @@ mod tests {
             assert!(!profile.skills.is_empty());
             assert!(!profile.operating_rules.is_empty());
             assert_eq!(profile.tool_scope.len(), 2);
-            assert!(profile.tool_scope.iter().all(|tool| tool.starts_with("filesystem.")));
+            assert!(profile
+                .tool_scope
+                .iter()
+                .all(|tool| tool.starts_with("filesystem.")));
         }
     }
 
