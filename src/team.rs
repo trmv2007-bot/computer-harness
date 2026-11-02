@@ -242,15 +242,12 @@ mod tests {
             assert!(!profile.current_scope.trim().is_empty());
             assert!(!profile.skills.is_empty());
             assert!(!profile.operating_rules.is_empty());
-            let expected_tools = if cfg!(windows)
-                && matches!(
-                    profile.id.as_str(),
-                    "fairy" | "operator"
-                ) {
-                3
-            } else {
-                2
-            };
+            let expected_tools =
+                if cfg!(windows) && matches!(profile.id.as_str(), "fairy" | "operator") {
+                    3
+                } else {
+                    2
+                };
             assert_eq!(profile.tool_scope.len(), expected_tools);
             assert!(profile.tool_scope[0].starts_with("filesystem."));
             assert!(profile.tool_scope[1].starts_with("filesystem."));
