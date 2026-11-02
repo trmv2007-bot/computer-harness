@@ -15,12 +15,12 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 - Control-plane startup detects task-run attempts left in `running` after an unexpected process exit, atomically marks them failed, records recovery events and requires an explicit retry.
 - Offline `fairy stop-all` latch blocks new agent requests and terminates Fairy-managed Qoder worker child processes; `fairy resume` explicitly clears the latch. It does not stop unrelated apps or arbitrary OS processes.
 - Central policy evaluator: exact capability grants required; destructive/admin/external operations require scoped approval; paid and financial actions are denied by the default zero-spend rule.
-- Initial read-only workspace tools: `filesystem.list` and `filesystem.read_text`. Both require `filesystem.read`, use cap-std directory handles to constrain access to the configured workspace, reject parent/absolute paths and external symlink escapes, enforce input/output bounds, block common credential paths and append audit events.
+- Initial read-only tools: `filesystem.list` and `filesystem.read_text` require `filesystem.read` and use cap-std directory handles to constrain access to the configured workspace. On Windows, `desktop.list_windows` can be exposed to Fairy and Operator only after an explicit `desktop.observe` grant; it returns bounded visible window metadata and is read-only. All tools pass through the central policy gateway and are audited.
 - Built-in specialist team: Fairy Coordinator, Engineer, Researcher, Operator, Auditor and Archivist. Each profile loads integrated skill playbooks, role-specific operating rules and an explicit current capability boundary into the Qoder system prompt. Task inspections use the Auditor profile by default.
 - Optional Qoder Agent SDK worker (`agent/`), pinned dependencies, custom MCP tools routed through Fairy's IPC gateway, strict success/error result propagation, usage/quota reporting, and CLI setup/ask commands. It uses the local signed-in Qoder CLI session; it does not assume unlimited/free inference.
 - Automated CI: Rust formatting, Clippy, tests and release builds on Windows/Ubuntu; Node worker syntax/manifest validation.
 
-The current agent can inspect non-sensitive text files and list a configured workspace. Queued tasks can be inspected with a one-shot read-only Qoder run; the output and usage are persisted, then the task pauses for owner review. It cannot edit files, run shell commands, control the desktop/browser, or perform arbitrary computer actions. The stop latch supervises and terminates Fairy-launched Qoder child processes; it does not terminate unrelated applications or general-purpose background workers.
+The current agent can inspect non-sensitive text files and list a configured workspace. On Windows, Fairy and Operator can also inspect bounded visible-window metadata when `desktop.observe` is explicitly granted. Queued tasks can be inspected with a one-shot read-only Qoder run; the output and usage are persisted, then the task pauses for owner review. It cannot edit files, run shell commands, click, type, control the browser or perform arbitrary computer actions. The stop latch supervises and terminates Fairy-launched Qoder child processes; it does not terminate unrelated applications or general-purpose background workers.
 
 ## Build
 
@@ -39,11 +39,15 @@ cargo build --release
 cargo run -- doctor
 cargo run -- workspace set "C:/path/to/your/project"
 cargo run -- policy grant filesystem.read "Owner approved workspace read access"
+# Windows only, and only when you are comfortable sharing visible window titles with Qoder:
+cargo run -- policy grant desktop.observe "Owner approved visible window metadata observation"
 cargo run -- tool list
 cargo run -- team list
 cargo run -- team show engineer
 cargo run -- agent setup
 cargo run -- agent ask --role engineer "Review the configured workspace architecture."
+# Windows only, after granting desktop.observe:
+cargo run -- agent ask --role operator "Summarize the visible application windows."
 cargo run -- task create "Inspect project" "Review the project structure and identify risks"
 
 # Either run in the foreground:
