@@ -13,6 +13,8 @@ use crate::{
 };
 
 const MAX_TEXT_FILE_BYTES: u64 = 1024 * 1024;
+const MAX_TOOL_INPUT_BYTES: usize = 16 * 1024;
+const MAX_DIRECTORY_ENTRIES: usize = 1000;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ToolDescriptor {
@@ -70,6 +72,10 @@ pub fn execute(
     input_json: &str,
     approval_id: Option<&str>,
 ) -> Result<Value> {
+    anyhow::ensure!(
+        input_json.len() <= MAX_TOOL_INPUT_BYTES,
+        "tool input exceeds the 16 KiB limit"
+    );
     let descriptor = registry()
         .into_iter()
         .find(|tool| tool.name == name)
@@ -83,9 +89,17 @@ pub fn execute(
     match policy::evaluate(granted, descriptor.side_effect, approval_valid) {
         AuthorizationDecision::Allowed => {}
         AuthorizationDecision::ApprovalRequired(reason) => {
+            store.record_audit_event(
+                "tool.execution_denied",
+                &json!({"tool":descriptor.name,"reason":"approval_required"}).to_string(),
+            )?;
             anyhow::bail!("approval required: {reason}");
         }
         AuthorizationDecision::Denied(reason) => {
+            store.record_audit_event(
+                "tool.execution_denied",
+                &json!({"tool":descriptor.name,"reason":"capability_or_policy_denied"}).to_string(),
+            )?;
             anyhow::bail!("tool denied: {reason}");
         }
     }
@@ -189,6 +203,10 @@ fn list_directory(root: &Path, input_json: &str) -> Result<Value> {
 
     let mut entries = Vec::new();
     for entry in fs::read_dir(&directory).context("read workspace directory")? {
+        anyhow::ensure!(
+            entries.len() < MAX_DIRECTORY_ENTRIES,
+            "directory exceeds the 1000-entry listing limit"
+        );
         let entry = entry?;
         let metadata = entry
             .file_type()
