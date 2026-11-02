@@ -124,6 +124,39 @@ impl Store {
             .context("read task")
     }
 
+    pub fn transition_task(&self, id: &str, next: &str) -> Result<Task> {
+        let current = self
+            .get_task(id)?
+            .ok_or_else(|| anyhow::anyhow!("task not found: {id}"))?;
+        let allowed = match current.state.as_str() {
+            "queued" => matches!(next, "running" | "paused" | "failed" | "cancelled"),
+            "running" => matches!(next, "paused" | "completed" | "failed" | "cancelled"),
+            "paused" => matches!(next, "queued" | "failed" | "cancelled"),
+            "failed" => next == "queued",
+            "completed" | "cancelled" => false,
+            _ => false,
+        };
+        anyhow::ensure!(
+            allowed,
+            "invalid task transition: {} -> {}",
+            current.state,
+            next
+        );
+        let updated_at = now();
+        let changed = self.conn.execute(
+            "UPDATE tasks SET state=?2, updated_at=?3 WHERE id=?1 AND state=?4",
+            params![id, next, updated_at, current.state],
+        )?;
+        anyhow::ensure!(changed == 1, "task changed concurrently; reload and retry");
+        self.record_event(
+            id,
+            "task.state_changed",
+            &serde_json::json!({"from": current.state, "to": next}).to_string(),
+        )?;
+        self.get_task(id)?
+            .ok_or_else(|| anyhow::anyhow!("task disappeared after state update"))
+    }
+
     pub fn cancel_task(&self, id: &str) -> Result<bool> {
         let now = now();
         let changed = self.conn.execute(
@@ -181,6 +214,18 @@ mod tests {
         let reopened = Store::open(&path).unwrap();
         assert_eq!(reopened.get_task(&id).unwrap().unwrap().state, "cancelled");
         assert_eq!(reopened.event_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn enforces_task_state_machine_and_records_transitions() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let task = store.create_task("State machine", "Verify legal transitions").unwrap();
+        let running = store.transition_task(&task.id, "running").unwrap();
+        assert_eq!(running.state, "running");
+        let completed = store.transition_task(&task.id, "completed").unwrap();
+        assert_eq!(completed.state, "completed");
+        assert!(store.transition_task(&task.id, "queued").is_err());
+        assert_eq!(store.event_count().unwrap(), 3);
     }
 
     #[test]
