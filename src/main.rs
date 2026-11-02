@@ -1,5 +1,6 @@
 mod ipc;
 mod policy;
+mod service;
 mod store;
 mod tools;
 
@@ -73,6 +74,11 @@ enum Command {
         #[command(subcommand)]
         action: ApprovalCommand,
     },
+    /// Install and manage the optional user-level background service.
+    Service {
+        #[command(subcommand)]
+        action: ServiceCommand,
+    },
     /// Run the optional Qoder Agent SDK worker.
     Agent {
         #[command(subcommand)]
@@ -80,6 +86,20 @@ enum Command {
     },
     /// Request an emergency stop of eligible Fairy work.
     StopAll,
+}
+
+#[derive(Subcommand)]
+enum ServiceCommand {
+    /// Install and enable Fairy at user logon (Windows) or as a systemd user service (Linux).
+    Install,
+    /// Stop, disable and remove the user-level service registration.
+    Uninstall,
+    /// Start the installed service.
+    Start,
+    /// Stop the running service.
+    Stop,
+    /// Show service registration and runtime status.
+    Status,
 }
 
 #[derive(Subcommand)]
@@ -501,6 +521,13 @@ async fn main() -> Result<()> {
                 );
                 println!("denied {id}");
             }
+        },
+        Command::Service { action } => match action {
+            ServiceCommand::Install => println!("{}", service::install(&data_dir).await?),
+            ServiceCommand::Uninstall => println!("{}", service::uninstall(&data_dir).await?),
+            ServiceCommand::Start => println!("{}", service::start(&data_dir).await?),
+            ServiceCommand::Stop => println!("{}", service::stop(&data_dir).await?),
+            ServiceCommand::Status => print_json(&service::status(&data_dir).await?)?,
         },
         Command::Agent { action } => {
             let agent_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("agent");
