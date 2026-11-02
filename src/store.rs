@@ -825,8 +825,8 @@ mod tests {
         let task = store
             .create_task("State machine", "Verify legal transitions")
             .unwrap();
-        let running = store.transition_task(&task.id, "running").unwrap();
-        assert_eq!(running.state, "running");
+        let paused = store.transition_task(&task.id, "paused").unwrap();
+        assert_eq!(paused.state, "paused");
         let completed = store.transition_task(&task.id, "completed").unwrap();
         assert_eq!(completed.state, "completed");
         assert!(store.transition_task(&task.id, "queued").is_err());
