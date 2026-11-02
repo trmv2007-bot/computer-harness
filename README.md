@@ -13,13 +13,14 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 - Bounded IPC connection admission, request timeouts, Unix token-file permissions and a client response reader sized to the 8 MiB server limit.
 - Task create/state/cancel and task execution lifecycle changes are committed atomically with their audit events; execution results and usage snapshots persist across CLI sessions.
 - Control-plane startup detects task-run attempts left in `running` after an unexpected process exit, atomically marks them failed, records recovery events and requires an explicit retry.
+- Offline `fairy stop-all` latch blocks new agent requests and terminates Fairy-managed Qoder worker child processes; `fairy resume` explicitly clears the latch. It does not stop unrelated apps or arbitrary OS processes.
 - Central policy evaluator: exact capability grants required; destructive/admin/external operations require scoped approval; paid and financial actions are denied by the default zero-spend rule.
 - Initial read-only workspace tools: `filesystem.list` and `filesystem.read_text`. Both require `filesystem.read`, use cap-std directory handles to constrain access to the configured workspace, reject parent/absolute paths and external symlink escapes, enforce input/output bounds, block common credential paths and append audit events.
 - Built-in specialist team: Fairy Coordinator, Engineer, Researcher, Operator, Auditor and Archivist. Each profile loads integrated skill playbooks, role-specific operating rules and an explicit current capability boundary into the Qoder system prompt. Task inspections use the Auditor profile by default.
 - Optional Qoder Agent SDK worker (`agent/`), pinned dependencies, custom MCP tools routed through Fairy's IPC gateway, strict success/error result propagation, usage/quota reporting, and CLI setup/ask commands. It uses the local signed-in Qoder CLI session; it does not assume unlimited/free inference.
 - Automated CI: Rust formatting, Clippy, tests and release builds on Windows/Ubuntu; Node worker syntax/manifest validation.
 
-The current agent can inspect non-sensitive text files and list a configured workspace. Queued tasks can be inspected with a one-shot read-only Qoder run; the output and usage are persisted, then the task pauses for owner review. It cannot edit files, run shell commands, control the desktop/browser, or perform arbitrary computer actions.
+The current agent can inspect non-sensitive text files and list a configured workspace. Queued tasks can be inspected with a one-shot read-only Qoder run; the output and usage are persisted, then the task pauses for owner review. It cannot edit files, run shell commands, control the desktop/browser, or perform arbitrary computer actions. The stop latch supervises and terminates Fairy-launched Qoder child processes; it does not terminate unrelated applications or general-purpose background workers.
 
 ## Build
 
@@ -56,6 +57,10 @@ cargo run -- task inspect <TASK_ID>
 cargo run -- task result <TASK_ID>
 # Review the persisted result before accepting it:
 cargo run -- task accept <TASK_ID>
+
+# Emergency stop/resume for Fairy-managed agent work:
+cargo run -- stop-all
+cargo run -- resume
 
 # To stop or remove the service:
 cargo run -- service stop
