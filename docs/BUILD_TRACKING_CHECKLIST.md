@@ -36,8 +36,8 @@ Latest CI evidence must be refreshed against the current branch head after each 
 
 ### Gate 1 — Persistent CLI core
 - [ ] CLI lifecycle and structured command output.
-- [ ] Persistent background runtime and reconnecting sessions (foreground loopback control plane and CLI RPC are implemented; opt-in Windows Task Scheduler and Linux systemd user-service registration is implemented in code, but service lifecycle, crash/restart and reconnect recovery still need device validation).
-- [ ] Durable task/event store, checkpoints and recovery.
+- [ ] Persistent background runtime and reconnecting sessions (foreground loopback control plane, CLI RPC, opt-in Windows Task Scheduler and Linux systemd user-service registration exist; user-device lifecycle, crash/restart and reconnect recovery remain unverified).
+- [ ] Durable task/event store and persisted agent-attempt results with owner review (schema v4); automatic scheduling, checkpoints and crash recovery remain open.
 - [ ] Diagnostics, logs, configuration and migrations.
 - [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness for the persistent core.
 - [ ] Demonstrate that closing CLI sessions does not increase background resource consumption.
@@ -52,8 +52,8 @@ Latest CI evidence must be refreshed against the current branch head after each 
 
 ### Gate 3 — Tool and safety gateway
 - [ ] Typed tool registry and platform capability declarations (initial workspace list/read tools exist; OS adapters and broader tools remain open).
-- [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approvals, a central policy evaluator, two read-only filesystem executors and audited tool RPC exist; write tools, stronger sandboxing and comprehensive secret redaction remain open).
-- [ ] Sandboxed execution and secret redaction (canonical workspace path checks exist but are not an OS sandbox; race hardening and comprehensive redaction remain open).
+- [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approvals, a central policy evaluator, two read-only filesystem executors and audited tool RPC exist; write tools, whole-process sandboxing and comprehensive secret redaction remain open).
+- [ ] Sandboxed execution and secret redaction (workspace access uses cap-std directory capabilities and blocks common credential paths; the whole process is not sandboxed and secret-pattern coverage is not comprehensive).
 - [ ] Cancellation, timeouts and side-effect classification.
 - [ ] Local emergency stop works offline.
 
@@ -62,7 +62,7 @@ Latest CI evidence must be refreshed against the current branch head after each 
 - [ ] Adaptive concurrency and bounded work queues.
 - [ ] File/application locks and idempotent retry behavior.
 - [ ] Worker isolation, partial failure and result aggregation.
-- [ ] Independent verification and evidence-based completion.
+- [ ] Persisted attempt outcomes and explicit owner acceptance exist; independent verification and evidence-based completion remain open.
 
 ### Gate 5 — Memory, skills and learning
 - [ ] Hybrid memory scopes and provenance.
