@@ -339,6 +339,11 @@ impl Store {
     }
 
     /// Atomically consume an approved, action-scoped approval exactly once.
+    ///
+    /// Reserved for the future tool executor; deliberately not exposed as a
+    /// standalone CLI operation because that would consume approval without
+    /// performing the approved action.
+    #[allow(dead_code)]
     pub fn consume_approval(&self, id: &str, action: &str) -> Result<bool> {
         let action = validate_key(action, "approval action")?;
         let changed = self.conn.execute(
