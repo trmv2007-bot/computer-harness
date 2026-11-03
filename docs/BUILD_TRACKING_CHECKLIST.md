@@ -2,119 +2,166 @@
 
 This document is the execution companion to [the planning specification](./COMPUTER_HARNESS_PLANNING_SPEC.md).
 
-**Current status: PARTIAL — early core prototype; all release gates remain open.**
+**Current status: IN PROGRESS — Fairy 0.3.0 artifact reviewed and mapped on `feat/fairy-runtime-0.3.0`; its source archive remains outside this repository. A separate native Rust CLI foundation is under review in draft PR #4.**
+**Implementation authorization:** Owner explicitly supplied `START THE BUILD` on 2026-11-02. This authorizes implementation but does not waive safety, cost, platform, testing or approval requirements.
 
-Latest CI evidence must be refreshed against the current branch head after each implementation batch; older successful runs do not verify later commits.
-**Implementation authorization phrase:** `START THE BUILD`
+## Current implementation snapshot
 
-## Rules for the eventual build
+| Gate | Status | Evidence / remaining work |
+|---|---|---|
+| 0 — Specification | Partial | Existing decisions/spec retained. Some architecture choices (Rust core, IPC, federation, resource budgets) remain open. |
+| 1 — Persistent CLI core | Artifact evidence only | The separate 0.3.0 bundle contains a CLI/daemon, local API, SQLite memory and reminders; its Linux smoke is recorded in the artifact report. Source is not yet committed here; multi-client recovery, migrations and Windows footprint measurements remain. |
+| 2 — Intelligence adapters | Artifact evidence only | The separate bundle contains a Qoder-backed Claude Code client and fail-closed quota prototype. No live account/auth/quota test or independent Agent SDK engine validation has been run; source is not yet committed here. |
+| 3 — Tool and safety gateway | Artifact evidence only | The separate bundle contains approval-gated brokers and tool allowlists. Full OS sandboxing and Windows permission-abuse testing remain; source vendoring is pending. |
+| 4 — Planning and concurrency | Artifact evidence only | The separate bundle contains initiative contracts and a sequential Research → Delivery → Quality prototype. General dependency DAG, adaptive concurrency, broad locks, cancellation and leases remain; source vendoring is pending. |
+| 5 — Memory, skills and learning | Artifact evidence only | The separate bundle contains SQLite/FTS5, deterministic retrieval and optional user-supplied ONNX embeddings. Provenance-complete scopes, encryption, offline sync/conflict resolution and deletion propagation remain; source vendoring is pending. |
+| 6 — Windows-first node | Unverified artifact | Windows scripts and HUD/hotkey/SAPI adapters are reported in the separate bundle. No target-PC installation or physical Windows acceptance run; source vendoring is pending. |
+| 7 — Linux and Android nodes | Not started | Android control broker is not a native Android node. Native Linux/Android lifecycle and cross-platform contract tests are outstanding. |
+| 8 — Federation | Not started | No secure pairing, remote transport, relay, leases or offline node synchronization. |
+| 9 — Vision and research | Partial | Browser control, on-demand screenshot action, research-team profile and source-conscious workflow. No general visual-understanding model or live browser/device validation. |
+| 10 — Proactivity and self-development | Partial | Configured-root marker/AST discovery and guarded initiative pipeline. Open-ended discovery and isolated source self-development with canary promotion/rollback are incomplete. |
+| 11 — Performance, security and release | Artifact-level evidence only | The separate bundle's report records 94 offline tests, compile and clean-archive smoke. These tests have not been run from this repository. Real Windows/Linux/Android performance, Gaming Mode, threat-model review and device/provider checks remain. |
 
-- [x] Read the planning specification (implementation must continue to preserve all requirements).
-- [ ] Convert every requirement into a tracked issue or task with an owner, dependency and acceptance criteria.
-- [ ] Resolve open decisions or record explicit, user-approved defaults.
-- [x] Build in small, reviewable milestones (prototype branch/PR is still draft).
-- [ ] Keep a requirements-to-code-to-test traceability matrix.
-- [ ] Never mark a feature complete based only on generated code or a model's claim.
+## Separate native Rust CLI prototype (draft PR #4)
+
+This code is a separate implementation track from the Fairy 0.3.0 Python archive described in the gate checklist above. Keep the PR in draft; passing its current checks does not close the product milestone.
+
+- Rust source, Windows/Linux CI, and the prototype's implemented limits are recorded in [implementation status](IMPLEMENTATION_STATUS.md) and [PR #4](https://github.com/trmv2007-bot/computer-harness/pull/4).
+- Local Windows x64 validation with Rust 1.99.1 passed: `cargo check --all-targets`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --all-targets` (31 tests).
+- Hosted CI on commit `9672e0e780cd4f36ef61da739a98698cb8117d38` passed Ubuntu, Windows, and node-worker jobs: [run 41598770490](https://github.com/trmv2007-bot/computer-harness/actions/runs/41598770490).
+- Still open: Android device checks, owner-account Qoder validation, service lifecycle acceptance on target devices, broader cross-platform scope, and all release gates below.
+
+## Rules for the build
+
+- [x] Read the planning specification before the first implementation slice.
+- [x] Record explicit implementation authorization.
+- [ ] Convert every remaining requirement into a tracked issue or task with owner, dependency and acceptance criteria.
+- [ ] Resolve open decisions or record explicitly owner-approved defaults.
+- [x] Build in small, reviewable milestones.
+- [x] Maintain a requirements-to-code-to-test traceability record for the Fairy 0.3.0 slice.
+- [ ] Extend traceability to every requirement and supported platform.
+- [x] Never mark a feature complete based only on generated code or a model's claim.
 - [ ] Test the actual runtime on each supported platform; do not infer Android/Linux support from Windows tests.
-- [ ] Follow the Windows-first rollout: complete the first usable Windows vertical slice, then implement Linux and Android against the same portable core contracts.
-- [ ] Record exact test commands, environment, results and limitations.
-- [ ] Treat idle footprint and host responsiveness as release requirements, not optional optimization.
-- [ ] Keep always-on core separate from on-demand heavy workers; avoid unbounded polling, queues, caches and concurrency.
-- [ ] Benchmark the core and optional workers separately on real target hardware before setting numeric budgets.
-- [ ] Maintain migration, backup and rollback paths for user data and runtime updates.
-- [ ] Keep costs at zero unless the owner explicitly authorizes a paid service.
-- [ ] Preserve the CLI-first direction; dashboard is deferred.
-- [ ] Record scope changes in the planning specification and explain their impact.
+- [ ] Complete the Windows-first rollout on the owner's real Windows machine.
+- [x] Record exact automated test command, environment, results and limitations for Fairy 0.3.0.
+- [ ] Measure idle footprint and host responsiveness on target hardware.
+- [ ] Maintain complete migrations, backup and rollback paths for all persistent user data.
+- [x] Keep cloud disabled by default and no paid fallback in the Fairy sample configuration.
+- [x] Preserve the CLI-first direction; the HUD is a local companion interface, not a dashboard replacement.
+- [ ] Benchmark core and optional workers separately on target hardware.
+- [ ] Keep always-on core separate from on-demand heavy workers with bounded queues and concurrency.
+- [ ] Implement Linux and Android against shared platform-neutral core contracts.
 
 ## Milestone gates
 
 ### Gate 0 — Specification
-- [ ] Review all agreed decisions with the owner.
-- [ ] Resolve architecture interfaces and threat model.
-- [ ] Confirm MVP scope without dropping later requirements.
-- [ ] Define measurable acceptance criteria and test matrix.
+
+- [x] Review existing agreed decisions with the owner.
+- [ ] Resolve all architecture interfaces and threat-model questions.
+- [ ] Confirm the complete MVP scope without dropping later requirements.
+- [ ] Define measurable acceptance criteria and a test matrix for all platforms.
 
 ### Gate 1 — Persistent CLI core
-- [ ] CLI lifecycle and structured command output.
-- [ ] Persistent background runtime and reconnecting sessions (foreground loopback control plane, CLI RPC, opt-in Windows Task Scheduler and Linux systemd user-service registration exist; user-device lifecycle, crash/restart and reconnect recovery remain unverified).
-- [ ] Durable task/event store and persisted agent-attempt results with owner review (schema v4); idempotent startup recovery for interrupted attempts now exists; automatic scheduling, leases and checkpoints remain open.
-- [ ] Diagnostics, logs, configuration and migrations.
-- [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness for the persistent core.
+
+- [x] CLI lifecycle and structured command output (Fairy 0.3.0 prototype).
+- [x] Persistent daemon lifecycle, health endpoint and clean start/stop smoke (Linux container).
+- [x] Local SQLite event/fact memory and FTS5 recall.
+- [ ] Verify restart recovery of all task state on Windows.
+- [ ] Verify multiple CLI clients observe consistent state.
+- [ ] Complete task/event checkpoints, retry reconciliation and configuration migrations.
+- [ ] Measure idle CPU wakeups, resident memory, startup time and CLI responsiveness on Windows.
 - [ ] Demonstrate that closing CLI sessions does not increase background resource consumption.
 
 ### Gate 2 — Intelligence adapters
-- [ ] Separate model-provider and agent-engine interfaces.
-- [ ] Qoder provider and Agent SDK adapters are independently configurable (optional Agent SDK worker/CLI integration exists; a separate model-provider adapter is not yet implemented).
-- [ ] Official authentication only; account quota behavior verified (worker uses qodercliAuth; auth and usage have not been tested on the owner's device).
-- [ ] Capability-aware quality-first model routing.
-- [ ] Hard zero-spend mode and queue/resume behavior.
-- [ ] Provider outage and context handoff tests.
+
+- [x] Prototype Qoder-backed Claude Code adapter client and fail-closed cloud gate.
+- [ ] Separate and independently configure Qoder provider and Qoder Agent SDK engine adapters.
+- [ ] Verify official Qoder authentication and account quota behavior on the user's account.
+- [ ] Verify shared Qoder quota is never double-counted.
+- [ ] Verify capability-aware quality-first routing.
+- [x] Hard zero-spend/offline mode in the sample configuration and tests.
+- [ ] Verify queue/resume, provider outage and context handoff on live adapter sessions.
+- [ ] Verify no paid fallback in every routing path.
 
 ### Gate 3 — Tool and safety gateway
-- [ ] Typed tool registry and platform capability declarations (workspace read tools and Windows-only `desktop.list_windows` observation with explicit `desktop.observe` grant exist; input injection, browser and broader OS adapters remain open).
-- [ ] Permission checks, approval workflow and audit trail (exact-name grants, action-scoped approvals, a central policy evaluator, two read-only filesystem executors and audited tool RPC exist; write tools, whole-process sandboxing and comprehensive secret redaction remain open).
-- [ ] Sandboxed execution and secret redaction (workspace access uses cap-std directory capabilities and blocks common credential paths; the whole process is not sandboxed and secret-pattern coverage is not comprehensive).
-- [ ] Cancellation, timeouts and side-effect classification.
-- [ ] Local emergency stop works offline.
+
+- [x] Approval-gated prototype brokers for desktop, browser, Android and learned recipes.
+- [x] Local API authentication, secret redaction and audit records in tested paths.
+- [x] Explicit tool allowlists for Research, Delivery and read-only Quality stages.
+- [ ] Complete OS-level sandbox enforcement and permission-abuse tests on Windows.
+- [ ] Verify cancellation, timeouts and side-effect classification across all tools.
+- [ ] Verify universal emergency stop works offline and stops active workers.
 
 ### Gate 4 — Planning and concurrency
-- [ ] Task contracts and dependency DAG.
-- [ ] Adaptive concurrency and bounded work queues.
-- [ ] File/application locks and idempotent retry behavior.
-- [ ] Worker isolation, partial failure and result aggregation.
-- [ ] Persisted attempt outcomes and explicit owner acceptance exist; independent verification and evidence-based completion remain open.
+
+- [x] Task/initiative contracts and sequential Research → Delivery → Quality pipeline.
+- [x] Isolated Git worktree for automated Delivery changes.
+- [x] Configured verification commands execute as fixed argv arrays without a shell.
+- [ ] Implement a general dependency DAG, adaptive concurrency and bounded worker queues.
+- [ ] Implement file/application locks, task leases and idempotent retry safeguards.
+- [ ] Verify cancellation, partial failure and result aggregation.
 
 ### Gate 5 — Memory, skills and learning
-- [ ] Hybrid memory scopes and provenance.
-- [ ] Offline synchronization/conflict resolution.
-- [ ] Skill packaging, versioning and validation (built-in team profiles and prompt playbooks exist; persistent executable/learned skills and replay validation remain open).
-- [ ] Context compression/restoration tests.
-- [ ] Inspection, correction, export and deletion behavior.
+
+- [x] SQLite/FTS5 memory and deterministic local retrieval.
+- [x] Optional ONNX embedding adapter requiring user-supplied weights.
+- [x] Packaged specialist profiles, team manifests, skills and tested recipe replay.
+- [ ] Complete provenance, scope enforcement and user inspection/correction/export/deletion.
+- [ ] Implement encrypted offline synchronization and deterministic conflict resolution.
+- [ ] Verify context compression/restoration and deletion propagation.
 
 ### Gate 6 — Windows-first operating-system node
-- [ ] Implement and test the first usable Windows node and local computer-control adapter.
-- [ ] Keep shared-core interfaces and capability contracts portable; isolate Windows-specific code behind the Windows adapter.
-- [ ] Validate CLI, persistence, tools, permissions, Gaming Mode and recovery on Windows.
-- [ ] Record known Windows-specific limitations and portability risks.
+
+- [x] Windows-specific PowerShell/HUD/hotkey/SAPI adapters included in the prototype.
+- [ ] Install and validate the CLI, daemon, tools, permissions and recovery on the actual Windows PC.
+- [ ] Verify F9, orb rendering, speech input/output and voice/wake phrase with target hardware.
+- [ ] Validate Gaming Mode and actual resource impact.
+- [ ] Record Windows-specific limitations and portability risks.
 
 ### Gate 7 — Linux and Android nodes
-- [ ] Implement and test the Linux adapter against the shared capability contracts.
-- [ ] Implement the Android node with lifecycle/background restrictions documented and tested.
-- [ ] Verify per-node permissions, pairing and revocation across all supported targets.
-- [ ] Run cross-platform contract and interoperability tests; do not infer support from Windows results.
+
+- [ ] Implement and test the Linux adapter against shared capability contracts.
+- [ ] Implement a native Android node with documented lifecycle/background constraints.
+- [ ] Verify per-node pairing, permissions and revocation.
+- [ ] Run cross-platform contract and interoperability tests.
 
 ### Gate 8 — Federation
-- [ ] LAN connectivity and secure remote transport.
-- [ ] Relay fallback decision and implementation, if approved.
+
+- [ ] Secure node identity and pairing.
+- [ ] LAN transport and authenticated/encrypted remote transport.
+- [ ] Approved relay fallback, if selected.
 - [ ] Node discovery, task leases and duplicate prevention.
 - [ ] Offline work and reconnection reconciliation.
 
 ### Gate 9 — Vision and research
-- [ ] Browser automation with permission boundaries.
-- [ ] Screenshot/GUI understanding and outcome verification.
-- [ ] Research source tracking, citation and uncertainty reporting.
-- [ ] No false claims about inaccessible media or private resources.
+
+- [x] Prototype browser automation with host allowlists and approval gates.
+- [x] On-demand screenshot action is available through the desktop broker.
+- [ ] Implement visual understanding and outcome verification on supported Windows UI.
+- [ ] Validate research citations, dates, uncertainty and source provenance with live sources.
+- [ ] Verify no false claims about inaccessible media/private resources.
 
 ### Gate 10 — Proactivity and self-development
-- [ ] High-proactivity event monitoring with bounded overhead.
-- [ ] Full project initiative inside configured authority.
-- [ ] Adaptive notifications and quiet/Gaming Mode behavior.
-- [ ] Isolated self-development branches/workspaces.
-- [ ] Regression, security, staged-promotion and rollback gates.
-- [ ] Protected safety supervisor and audit controls.
+
+- [x] Configured-root, read-only marker/AST opportunity discovery prototype.
+- [x] Initiative contracts and Research → Delivery → Quality review pipeline.
+- [ ] Extend discovery to evidence-backed opportunities beyond current marker/AST heuristics.
+- [ ] Implement adaptive notifications and quiet/Gaming Mode behavior.
+- [ ] Implement isolated source self-development branches, regression/security gates and staged promotion.
+- [ ] Verify rollback and protected safety-supervisor invariants.
 
 ### Gate 11 — Performance, security and release readiness
-- [ ] Gaming Mode performance measurements on target hardware.
-- [ ] Establish measured idle/active resource budgets separately for core and workers.
-- [ ] Benchmark bounded concurrency under load and verify backpressure prevents resource spikes.
-- [ ] Measure Android battery/background impact and Windows/Linux idle overhead.
-- [ ] Verify browser, GUI, indexing and compile workers can be throttled or stopped independently.
-- [ ] CPU/RAM/GPU/disk/network resource governor tests.
-- [ ] Threat-model review and permission abuse tests.
-- [ ] Crash, network-loss, provider-exhaustion and recovery tests.
-- [ ] End-to-end acceptance suite and requirement traceability review.
-- [ ] Document known limitations and deferred requirements.
-- [ ] Owner review before declaring the first release ready.
+
+- [ ] Vendor Fairy 0.3.0 source into this repository and re-run its tests from the checked-in source (separate artifact report records 94 passes on Linux/Python 3.13.5).
+- [ ] Re-run fresh archive/source extraction, local install, daemon, authenticated API, memory/reminder smoke and clean stop from the repository artifact after vendoring.
+- [x] Package privacy scan excludes local credentials, personal memory and runtime state.
+- [ ] Run Windows, Linux and Android acceptance suites on actual target devices.
+- [ ] Measure Gaming Mode and idle/active CPU/RAM/GPU/disk/network budgets.
+- [ ] Benchmark bounded concurrency and verify backpressure.
+- [ ] Complete threat-model review and permission-abuse testing.
+- [ ] Run crash, network-loss, provider-exhaustion and recovery tests on each node.
+- [ ] Complete end-to-end requirement traceability review.
+- [ ] Obtain owner review before declaring the first release ready.
 
 ## Definition of done
 
@@ -124,6 +171,6 @@ A requirement is complete only when:
 3. Relevant automated and manual tests have actually run.
 4. Evidence is recorded.
 5. Known limitations are stated.
-6. The requirement's status is traceable in the build checklist.
+6. Its status is traceable in the specification/checklist.
 
 Never hide a failed, skipped or untested requirement behind a general "done" claim.

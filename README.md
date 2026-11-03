@@ -1,88 +1,56 @@
 # Computer Harness
 
-**Implementation status: early prototype — not release-ready.**
+**Status: implementation underway.** The owner authorized the build with `START THE BUILD` on 2026-11-02. The Fairy 0.3.0 prototype has been audited and mapped to requirements on the review branch `feat/fairy-runtime-0.3.0`; its source archive is delivered separately and is **not yet vendored into this Git repository**. Draft PR #4 contains a separate native Rust CLI foundation. Neither track has been merged into `main`.
 
-Computer Harness is a persistent, federated, cross-platform computer-agent runtime with **Fairy** as its adaptive companion and coordinator. The product is CLI-first; a dashboard is deferred until the runtime is dependable.
+Computer Harness is a persistent, federated, cross-platform computer-agent runtime. **Fairy** is its adaptive companion and primary coordinator. The original planning specification remains the architectural source of truth; this integration is a Windows-first prototype, not a claim that every platform or milestone is complete.
 
-## Implemented in this branch
+## Project documents
 
-- Rust CLI with diagnostics, local status, control-plane, tasks, workspace, capabilities, approvals, registered tools and optional agent commands.
-- SQLite WAL store (schema v4), durable tasks and execution attempts, event log, capability grants, action-scoped approvals and workspace settings, durable task records, lifecycle transitions, event log, capability grants, action-scoped approvals and workspace settings.
-- Foreground loopback control plane (`fairy serve`) with per-user token authentication, bounded requests/responses and task/tool RPC.
-- Explicit user-level startup service commands: Windows Task Scheduler at logon and Linux systemd user service with restart-on-failure. Installation is opt-in; it is never enabled implicitly.
-- Bounded IPC connection admission, request timeouts, Unix token-file permissions and a client response reader sized to the 8 MiB server limit.
-- Task create/state/cancel and task execution lifecycle changes are committed atomically with their audit events; execution results and usage snapshots persist across CLI sessions.
-- Control-plane startup detects task-run attempts left in `running` after an unexpected process exit, atomically marks them failed, records recovery events and requires an explicit retry.
-- Offline `fairy stop-all` latch blocks new agent requests and terminates Fairy-managed Qoder worker child processes; `fairy resume` explicitly clears the latch. It does not stop unrelated apps or arbitrary OS processes.
-- Central policy evaluator: exact capability grants required; destructive/admin/external operations require scoped approval; paid and financial actions are denied by the default zero-spend rule.
-- Initial read-only tools: `filesystem.list` and `filesystem.read_text` require `filesystem.read` and use cap-std directory handles to constrain access to the configured workspace. On Windows, `desktop.list_windows` can be exposed to Fairy and Operator only after an explicit `desktop.observe` grant; it returns bounded visible window metadata and is read-only. All tools pass through the central policy gateway and are audited.
-- Built-in specialist team: Fairy Coordinator, Engineer, Researcher, Operator, Auditor and Archivist. Each profile loads integrated skill playbooks, role-specific operating rules and an explicit current capability boundary into the Qoder system prompt. Task inspections use the Auditor profile by default.
-- Optional Qoder Agent SDK worker (`agent/`), pinned dependencies, custom MCP tools routed through Fairy's IPC gateway, strict success/error result propagation, usage/quota reporting, and CLI setup/ask commands. It uses the local signed-in Qoder CLI session; it does not assume unlimited/free inference.
-- Automated CI: Rust formatting, Clippy, tests and release builds on Windows/Ubuntu; Node worker syntax/manifest validation.
+- [Planning specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md) — agreed product decisions, conceptual architecture, autonomy, providers, memory, self-development, security and acceptance criteria.
+- [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md) — milestone gates and current evidence status.
+- [Fairy runtime integration record](docs/FAIRY_RUNTIME_INTEGRATION.md) — what 0.3.0 supplies, how it maps to the specification, verification and outstanding work.
 
-The current agent can inspect non-sensitive text files and list a configured workspace. On Windows, Fairy and Operator can also inspect bounded visible-window metadata when `desktop.observe` is explicitly granted. Queued tasks can be inspected with a one-shot read-only Qoder run; the output and usage are persisted, then the task pauses for owner review. It cannot edit files, run shell commands, click, type, control the browser or perform arbitrary computer actions. The stop latch supervises and terminates Fairy-launched Qoder child processes; it does not terminate unrelated applications or general-purpose background workers.
+## Current implementation tracks
 
-## Build
+### Native Rust CLI foundation
 
-Install stable Rust/Cargo. For Qoder integration, install Node.js 18+ and sign in with the official Qoder CLI.
+Draft [PR #4](https://github.com/trmv2007-bot/computer-harness/pull/4) adds a Rust CLI, durable SQLite task store, loopback control plane, policy-gated read tools, optional Qoder worker, and Windows/Linux CI. Its scope and verification are recorded in [implementation status](docs/IMPLEMENTATION_STATUS.md) and [architecture contracts](docs/ARCHITECTURE_CONTRACTS.md). It remains an early prototype; it does not implement the full Computer Harness product.
 
-```sh
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets
-cargo build --release
-```
+### Separate Fairy 0.3.0 Python prototype
 
-## Try the current CLI
+This versioned source bundle is delivered separately:
 
-```sh
-cargo run -- doctor
-cargo run -- workspace set "C:/path/to/your/project"
-cargo run -- policy grant filesystem.read "Owner approved workspace read access"
-# Windows only, and only when you are comfortable sharing visible window titles with Qoder:
-cargo run -- policy grant desktop.observe "Owner approved visible window metadata observation"
-cargo run -- tool list
-cargo run -- team list
-cargo run -- team show engineer
-cargo run -- agent setup
-cargo run -- agent ask --role engineer "Review the configured workspace architecture."
-# Windows only, after granting desktop.observe:
-cargo run -- agent ask --role operator "Summarize the visible application windows."
-cargo run -- task create "Inspect project" "Review the project structure and identify risks"
+- Separately delivered artifact: `fairy-harness-0.3.0.zip` (download link is in the ChatGPT conversation, not a GitHub file yet).
+- SHA-256: `cc77a8756d99a77a4d071ebd0eb9c3eb777057bd7f4267ce26f83ac62b171896`
+- Exact archive size: 166,555 bytes.
+- Verification baseline recorded by the artifact: Linux, Python 3.13.5, 94 offline tests passed. These are **artifact-level results**, not tests run from this repository. See the integration record for limitations.
 
-# Either run in the foreground:
-cargo run -- serve
+That separate bundle contains a Python CLI/daemon prototype, local SQLite/FTS5 memory, optional Qoder-backed Claude Code adapter client, budget controls, task/initiative workflow, specialist agent/team profiles, approval-gated desktop/browser/Android brokers, voice hooks and a local HUD. Hardware- and provider-dependent capabilities remain unverified until tested on the target Windows machine.
 
-# Or install an opt-in user service (Windows/Linux):
-cargo run -- service install
-cargo run -- service status
-cargo run -- agent ask "Inspect this workspace and summarize its structure."
-cargo run -- task inspect <TASK_ID>
-cargo run -- task result <TASK_ID>
-# Review the persisted result before accepting it:
-cargo run -- task accept <TASK_ID>
+## Architecture and scope discipline
 
-# Emergency stop/resume for Fairy-managed agent work:
-cargo run -- stop-all
-cargo run -- resume
+The planning specification recommends evaluating a Rust-first shared core with thin platform adapters. Fairy 0.3.0 is a Python Windows-first vertical slice. That is an implementation bridge to test product behavior; it does **not** silently settle the open language, IPC, provider/engine, federation or resource-budget decisions.
 
-# To stop or remove the service:
-cargo run -- service stop
-cargo run -- service uninstall
-```
+Current release limitations are explicit:
 
-The service manager is implemented for Windows Task Scheduler and Linux systemd user services; the actual installation/startup lifecycle still needs owner-device validation. The optional Qoder worker has not yet been verified against the owner's Qoder account or PC.
+- Windows target hardware and microphone have not been tested here.
+- Live Qoder authentication, model generation and Claude Code tool compatibility have not been exercised.
+- Linux/Android native nodes and federated networking are not implemented.
+- Browser/ADB integration is protocol-tested with mocks, not live devices.
+- Adaptive Gaming Mode, full GUI vision, general dependency-DAG parallelism and staged self-development promotion remain incomplete.
 
-## Planning and evidence
+See the integration record and checklist before treating any gate as complete.
 
-- [Planning specification](docs/COMPUTER_HARNESS_PLANNING_SPEC.md)
-- [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md)
-- [Architecture contracts](docs/ARCHITECTURE_CONTRACTS.md)
-- [Implementation status](docs/IMPLEMENTATION_STATUS.md)
-- [Qoder worker setup and limits](agent/README.md)
+## Safety and cost rules
 
-## Not implemented
+- The existing Qoder adapter/login is an optional provider/engine integration; this prototype does not replace it or bundle credentials.
+- Cloud use is disabled by default. No paid fallback, credit purchase, provider-limit bypass or automatic quota evasion is allowed.
+- Project roots must be explicitly allowlisted. Automated delivery uses a Fairy-managed worktree and leaves changes uncommitted for review.
+- Browser, Android, voice and computer actions are disabled or constrained by default and require explicit configuration/approval.
+- Do not commit local config, API keys, transcripts, SQLite databases, usage ledgers, screenshots, browser profiles or personal memory.
 
-automatic task scheduling; multi-task concurrency, leases and checkpoints; provider/model routing and quota-aware pause/resume; Qoder account authentication/usage verification on owner device; write-capable tools; process sandboxing and comprehensive secret redaction; Windows/Linux desktop and browser control; Android adapter; vision/research pipeline; durable hybrid memory; versioned/learned skill engine and skill validation; secure federation/pairing; notifications; Gaming Mode/resource governor; proactive monitoring; self-improvement; dashboard; installer/updater.
+## Working with the prototype
 
-No hosted inference service is assumed to be unlimited or zero-cost. Paid fallback is disabled. Workspace filesystem access is rooted in cap-std directory capabilities; common credential paths are denied. This does not sandbox the entire Fairy process or protect against an already-compromised same-user process.
+For the separate Python artifact, extract the archive to a local development directory and follow its bundled README. Do not unpack it over an existing Computer Harness installation until migration and backup procedures have been reviewed.
+
+The Rust source in draft PR #4 is committed on its branch; the separate Fairy 0.3.0 archive is still outside Git and must not be described as vendored. Keep PR #4 in draft while the broader milestone remains incomplete and Android/device validation is pending.
