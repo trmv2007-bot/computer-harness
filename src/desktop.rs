@@ -13,8 +13,9 @@ const MAX_CLASS_CHARS: usize = 256;
 #[cfg(windows)]
 mod windows {
     use super::*;
+    use windows_sys::core::BOOL;
     use windows_sys::Win32::{
-        Foundation::{BOOL, HWND, LPARAM},
+        Foundation::{HWND, LPARAM},
         UI::WindowsAndMessaging::{
             EnumWindows, GetClassNameW, GetWindowTextLengthW, GetWindowTextW,
             GetWindowThreadProcessId, IsWindowVisible,
