@@ -1,6 +1,6 @@
 # Computer Harness
 
-**Status: implementation underway.** The owner authorized the build with `START THE BUILD` on 2026-11-02. The Fairy 0.3.0 prototype has been audited and mapped to requirements on the review branch `feat/fairy-runtime-0.3.0`. Its source archive is delivered separately in the ChatGPT conversation; it is **not yet vendored into this Git repository**, and nothing has been merged into `main`.
+**Status: implementation underway.** The owner authorized the build with `START THE BUILD` on 2026-11-02. The Fairy 0.3.0 prototype has been audited and mapped to requirements on the review branch `feat/fairy-runtime-0.3.0`; its source archive is delivered separately and is **not yet vendored into this Git repository**. Draft PR #4 contains a separate native Rust CLI foundation. Neither track has been merged into `main`.
 
 Computer Harness is a persistent, federated, cross-platform computer-agent runtime. **Fairy** is its adaptive companion and primary coordinator. The original planning specification remains the architectural source of truth; this integration is a Windows-first prototype, not a claim that every platform or milestone is complete.
 
@@ -10,16 +10,22 @@ Computer Harness is a persistent, federated, cross-platform computer-agent runti
 - [Build tracking checklist](docs/BUILD_TRACKING_CHECKLIST.md) — milestone gates and current evidence status.
 - [Fairy runtime integration record](docs/FAIRY_RUNTIME_INTEGRATION.md) — what 0.3.0 supplies, how it maps to the specification, verification and outstanding work.
 
-## Current implementation
+## Current implementation tracks
 
-The current prototype is distributed as a versioned source bundle:
+### Native Rust CLI foundation
+
+Draft [PR #4](https://github.com/trmv2007-bot/computer-harness/pull/4) adds a Rust CLI, durable SQLite task store, loopback control plane, policy-gated read tools, optional Qoder worker, and Windows/Linux CI. Its scope and verification are recorded in [implementation status](docs/IMPLEMENTATION_STATUS.md) and [architecture contracts](docs/ARCHITECTURE_CONTRACTS.md). It remains an early prototype; it does not implement the full Computer Harness product.
+
+### Separate Fairy 0.3.0 Python prototype
+
+This versioned source bundle is delivered separately:
 
 - Separately delivered artifact: `fairy-harness-0.3.0.zip` (download link is in the ChatGPT conversation, not a GitHub file yet).
 - SHA-256: `cc77a8756d99a77a4d071ebd0eb9c3eb777057bd7f4267ce26f83ac62b171896`
 - Exact archive size: 166,555 bytes.
 - Verification baseline recorded by the artifact: Linux, Python 3.13.5, 94 offline tests passed. These are **artifact-level results**, not tests run from this repository. See the integration record for limitations.
 
-The bundle contains a Python CLI/daemon prototype, local SQLite/FTS5 memory, optional Qoder-backed Claude Code adapter client, budget controls, task/initiative workflow, specialist agent/team profiles, approval-gated desktop/browser/Android brokers, voice hooks and a local HUD. Hardware- and provider-dependent capabilities remain unverified until tested on the target Windows machine.
+That separate bundle contains a Python CLI/daemon prototype, local SQLite/FTS5 memory, optional Qoder-backed Claude Code adapter client, budget controls, task/initiative workflow, specialist agent/team profiles, approval-gated desktop/browser/Android brokers, voice hooks and a local HUD. Hardware- and provider-dependent capabilities remain unverified until tested on the target Windows machine.
 
 ## Architecture and scope discipline
 
@@ -45,6 +51,6 @@ See the integration record and checklist before treating any gate as complete.
 
 ## Working with the prototype
 
-Extract the archive to a local development directory, then follow its bundled README. Do not unpack the runtime over an existing Computer Harness installation until migration and backup procedures have been reviewed.
+For the separate Python artifact, extract the archive to a local development directory and follow its bundled README. Do not unpack it over an existing Computer Harness installation until migration and backup procedures have been reviewed.
 
-This PR currently updates planning/traceability documentation only. The Fairy source archive still needs to be uploaded into `runtime/fairy/releases/` through a binary-capable Git workflow, then verified against the SHA-256 above. Do not describe the runtime code as committed until that step is complete. The PR is intentionally not merged.
+The Rust source in draft PR #4 is committed on its branch; the separate Fairy 0.3.0 archive is still outside Git and must not be described as vendored. Keep PR #4 in draft while the broader milestone remains incomplete and Android/device validation is pending.

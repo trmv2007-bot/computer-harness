@@ -2,7 +2,7 @@
 
 This document is the execution companion to [the planning specification](./COMPUTER_HARNESS_PLANNING_SPEC.md).
 
-**Current status: IN PROGRESS — Fairy 0.3.0 artifact reviewed and mapped in documentation on `feat/fairy-runtime-0.3.0`; runtime source is not yet vendored in this repository, merged or deployed.**  
+**Current status: IN PROGRESS — Fairy 0.3.0 artifact reviewed and mapped on `feat/fairy-runtime-0.3.0`; its source archive remains outside this repository. A separate native Rust CLI foundation is under review in draft PR #4.**
 **Implementation authorization:** Owner explicitly supplied `START THE BUILD` on 2026-11-02. This authorizes implementation but does not waive safety, cost, platform, testing or approval requirements.
 
 ## Current implementation snapshot
@@ -21,6 +21,15 @@ This document is the execution companion to [the planning specification](./COMPU
 | 9 — Vision and research | Partial | Browser control, on-demand screenshot action, research-team profile and source-conscious workflow. No general visual-understanding model or live browser/device validation. |
 | 10 — Proactivity and self-development | Partial | Configured-root marker/AST discovery and guarded initiative pipeline. Open-ended discovery and isolated source self-development with canary promotion/rollback are incomplete. |
 | 11 — Performance, security and release | Artifact-level evidence only | The separate bundle's report records 94 offline tests, compile and clean-archive smoke. These tests have not been run from this repository. Real Windows/Linux/Android performance, Gaming Mode, threat-model review and device/provider checks remain. |
+
+## Separate native Rust CLI prototype (draft PR #4)
+
+This code is a separate implementation track from the Fairy 0.3.0 Python archive described in the gate checklist above. Keep the PR in draft; passing its current checks does not close the product milestone.
+
+- Rust source, Windows/Linux CI, and the prototype's implemented limits are recorded in [implementation status](IMPLEMENTATION_STATUS.md) and [PR #4](https://github.com/trmv2007-bot/computer-harness/pull/4).
+- Local Windows x64 validation with Rust 1.99.1 passed: `cargo check --all-targets`, `cargo fmt --all -- --check`, `cargo clippy --all-targets --all-features -- -D warnings`, and `cargo test --all-targets` (31 tests).
+- Hosted CI on commit `9672e0e780cd4f36ef61da739a98698cb8117d38` passed Ubuntu, Windows, and node-worker jobs: [run 41598770490](https://github.com/trmv2007-bot/computer-harness/actions/runs/41598770490).
+- Still open: Android device checks, owner-account Qoder validation, service lifecycle acceptance on target devices, broader cross-platform scope, and all release gates below.
 
 ## Rules for the build
 

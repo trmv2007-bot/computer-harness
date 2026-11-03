@@ -1,0 +1,16 @@
+{
+  "name": "computer-harness-qoder-worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "check": "node --check qoder-worker.mjs"
+  },
+  "dependencies": {
+    "@qoder-ai/qoder-agent-sdk": "1.0.58",
+    "zod": "4.6.7"
+  }
+}
